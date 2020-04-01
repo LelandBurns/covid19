@@ -1,0 +1,155 @@
+---
+title: "Covid plots"
+output: html_notebook
+---
+
+## Set-up
+Load packages and set options
+```{r include = F, results = 'hide'}
+# load packages
+library(data.table)
+library(ggplot2)
+library(scales)
+library(dplyr)
+library(lubridate)
+library(utils)
+library(httr)
+
+# turn off scientific notation
+options(scipen = 999)
+```
+
+Read in files from NYT opensource database
+```{r include = F, results = 'hide'}
+state.raw <- data.table(read.csv(file=url("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv"), header=T))
+county.raw <- data.table(read.csv(file=url("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv"), header=T))
+state.raw[, date := as.Date(date)]
+county.raw[, date := as.Date(date)]
+```
+
+## Total counts
+Confirmed cases -- US
+```{r}
+agg.cases.US <- state.raw[order(date),
+                          .(total_cases = sum(cases, na.rm = T)),
+                          by = "date"]
+agg.cases.US.plot <- ggplot(agg.cases.US[date >= "2020-03-01"], aes(x = date, y = total_cases)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "Confirmed COVID cases",
+       title = "Total Confirmed COVID cases",
+       subtitle = "United States") +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_y_continuous(labels = comma)
+agg.cases.US.plot
+```
+
+Confirmed cases -- specific state
+```{r}
+# adjust state name to flow through rest of code (use capitalized full state name)
+use.state <- "South Carolina"
+cases.state <- state.raw[state %in% use.state]
+agg.cases.state <- cases.state[order(date),
+                          .(total_cases = sum(cases, na.rm = T)),
+                          by = "date"]
+agg.cases.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"], aes(x = date, y = total_cases)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "Confirmed COVID cases",
+       title = "Total Confirmed COVID cases",
+       subtitle = use.state) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_y_continuous(labels = comma)
+agg.cases.state.plot
+```
+
+Confirmed cases -- specific county
+```{r}
+# adjust state and county name to flow through rest of code (use capitalized full state name)
+use.state <- "California"
+use.county <- "Orange"
+cases.county <- county.raw[state %in% use.state & county %in% use.county]
+agg.cases.county <- cases.county[order(date),
+                          .(total_cases = sum(cases, na.rm = T)),
+                          by = "date"]
+agg.cases.county.plot <- ggplot(agg.cases.county[date >= "2020-03-01"], aes(x = date, y = total_cases)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "Confirmed COVID cases",
+       title = "Total Confirmed COVID cases",
+       subtitle = paste0(use.county, " County, ", use.state)) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_y_continuous(labels = comma)
+agg.cases.county.plot
+```
+
+Deaths -- US
+```{r}
+agg.deaths.US <- state.raw[order(date),
+                          .(total_deaths = sum(deaths, na.rm = T)),
+                          by = "date"]
+agg.deaths.US.plot <- ggplot(agg.deaths.US[date >= "2020-03-01"], aes(x = date, y = total_deaths)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "Confirmed COVID-related deaths",
+       title = "Total Confirmed COVID-related deaths",
+       subtitle = "United States") +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_y_continuous(labels = comma)
+agg.deaths.US.plot
+```
+
+Deaths -- specific state
+```{r}
+# adjust state name to flow through rest of code (use capitalized full state name)
+use.state <- "Washington"
+cases.state <- state.raw[state %in% use.state]
+agg.cases.state <- cases.state[order(date),
+                          .(total_cases = sum(cases, na.rm = T)),
+                          by = "date"]
+agg.cases.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"], aes(x = date, y = total_cases)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "Confirmed COVID cases",
+       title = "Total Confirmed COVID cases",
+       subtitle = use.state) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_y_continuous(labels = comma)
+agg.cases.state.plot
+```
+
+Deaths -- specific county
+```{r}
+
+```
+
+## New cases
+Confirmed cases -- US
+
+Confirmed cases -- specific state
+
+Confirmed cases -- specific county
+
+Deaths -- US
+
+Deaths -- specific state
+
+Deaths -- specific county
+
+## Rate of growth
+Confirmed cases -- US
+
+Confirmed cases -- specific state
+
+Confirmed cases -- specific county
+
+Deaths -- US
+
+Deaths -- specific state
+
+Deaths -- specific county
