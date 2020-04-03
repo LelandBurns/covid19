@@ -12,18 +12,19 @@ date: '`r format(Sys.time(), "%B %d, %Y")`'
 ---
 
 ## Background
-* This document is organized by geography: It starts by showing data for all of the U.S., followed by our respective states, followed by our respective counties.
-* Within each geophraphy, we show several plots:
-  * Total confirmed cases: This is the cumulative total of cases reported
-  * New confirmed cases: This is the number of new cases reported on each respective date
-  * Rolling 3-day case growth rate: This is the average daily growth rate in total cases over the previous 3 days. For instance, if it is 100%, then that means total cases are doubling every 3 days. (We don't show this at the county level because the sample size is too small.)
+* This page shows COVID data broken down into regions that affect our family. It pulls from publicly available raw data from the NY Times, which is reported daily. It's on a one-day lag, so when you see this report, the most recent day included while be the day prior.
+* The page is mostly organized by geography: It starts by showing data for all of the U.S., followed by our respective states, followed by our respective counties.
+* Within each geophraphy, it shows several plots:
+  * Total confirmed cases: This is the cumulative total of cases reported.
+  * New confirmed cases: This is the number of new cases reported on each respective date.
+  * Rolling 3-day case growth rate: This is the average daily growth rate in total cases over the previous 3 days. For instance, if it is 100%, then that means total cases are doubling every 3 days. (This isn't shown at the county level because the sample size is too small.)
   * Total deaths: This is the cumulative total of deaths reported
   * New deaths: This is the number of new deaths reported on each respective date
-  * Rolling 3-day death growth rate: This is the average daily growth rate in total deaths over the previous 3 days. For instance, if it is 100%, then that means total deaths are doubling every 3 days. (We don't show this at the county level because the sample size is too small.)
-* Besides this data for each geography, we also show some additional plots at the end:
-  * We show tables of both total cases and deaths *per million residents* for all states, and then we show a graph of trends of these numbers for the top 10 states (only using 10 in the graph so it's not too crowded). Showing the numbers per million helps normalize for the size of the states when looking at totals.
-  * We then show these same tables and plots for cases and deaths, but with new cases/deaths per million residents instead of total cases/deaths per million. This section uses a rolling 3-day average of new cases/deaths.
-  * Finally, we show the same rolling 3-day average of new cases, but broken out by states that have enacted stay-at-home orders and when the orders were enacted.
+  * Rolling 3-day death growth rate: This is the average daily growth rate in total deaths over the previous 3 days. For instance, if it is 100%, then that means total deaths are doubling every 3 days. (This isn't shown at the county level because the sample size is too small.)
+* Besides this data for each geography, it also includes some additional plots at the end:
+  * It shows tables of both total cases and deaths *per million residents* for all states, and then a graph of trends of these numbers for the top 10 states (only using 10 in the graph so it's not too crowded). Showing the numbers per million helps normalize for the size of the states when looking at totals.
+  * It then shows these same tables and plots for cases and deaths, but with new cases/deaths per million residents instead of total cases/deaths per million. This section uses a rolling 3-day average of new cases/deaths.
+  * Finally, it shows the same rolling 3-day average of new cases per million residents, but broken out by states that have enacted stay-at-home orders and when the orders were enacted.
   
 
 ```{r include = F, results = 'hide'}
@@ -1119,7 +1120,7 @@ agg.new.deaths.county.plot
 
 ### Total confirmed cases
 
-Table of total confirmed cases by population (all 50 states)
+Table of total confirmed cases per million residents (all 50 states)
 ```{r echo = F}
 state.per.cap <- merge(state.raw, stay_dates, by = "state", all.x = T)
 state.per.cap[, casesPerMillion := as.integer(cases/population * 1000000)]
@@ -1148,7 +1149,7 @@ state.per.cap.plot
 
 ### New confirmed cases
 
-Table of new cases by population: rolling 3-day average (all 50 states)
+Table of new cases per million residents: rolling 3-day average (all 50 states)
 ```{r echo = F}
 state.per.cap <- merge(state.raw, stay_dates, by = "state", all.x = T)
 date.cut <- max(state.per.cap$date)
@@ -1187,7 +1188,7 @@ state.per.cap.plot
 
 ### Total deaths
 
-Table of total deaths by population (all 50 states)
+Table of total deaths per million residents (all 50 states)
 ```{r echo = F}
 state.per.cap <- merge(state.raw, stay_dates, by = "state", all.x = T)
 state.per.cap[, deathsPerMillion := as.integer(deaths/population * 1000000)]
@@ -1216,7 +1217,7 @@ state.per.cap.plot
 
 ### New deaths
 
-Table of new deaths by population: rolling 3-day average (all 50 states)
+Table of new deaths per million residents: rolling 3-day average (all 50 states)
 ```{r echo = F}
 state.per.cap <- merge(state.raw, stay_dates, by = "state", all.x = T)
 date.cut <- max(state.per.cap$date)
