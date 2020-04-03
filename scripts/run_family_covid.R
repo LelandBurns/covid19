@@ -6,6 +6,9 @@ library(rJava)
 library(mailR)
 library(rmarkdown)
 
+#Align pandoc
+Sys.setenv(RSTUDIO_PANDOC="/Applications/RStudio.app/Contents/MacOS/pandoc")
+
 # set-date
 today <- format(Sys.Date(), "%B %d, %Y")
 yesterday <- format(Sys.Date() - 1, "%B %d, %Y")
@@ -22,7 +25,14 @@ body.text <- paste0("This is an automated email from Leland. Attached is an html
                     yesterday, ". To view it, download and then click to open. It should open in your browser. If not, right-click it once downloaded and choose to open with ",
                     "your browser of choice. If you have feedback or something else that you'd like included, let me know!")
 
-recipient.emails <- c("leland@ensemblex.com", "burnie310@yahoo.com")
+recipient.emails <- c("leland@ensemblex.com",
+                      "alyssa.c.burns@gmail.com",
+                      "bburns4223@sc.rr.com",
+                      "bburns8@dxc.com",
+                      "anthony.j.osbourne@gmail.com",
+                      "caroline.b.chisholm@gmail.com",
+                      "emery.ma.chisholm@gmail.com",
+                      "elizabeth.pinckney.burns@gmail.com")
 
 send.mail(from = "leland.b.burns@gmail.com",
           to = recipient.emails,
