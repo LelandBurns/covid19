@@ -22,8 +22,8 @@ options(scipen = 999)
 
 Read in files from NYT opensource database
 ```{r include = F, results = 'hide'}
-state.raw <- data.table(read.csv(file=url("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv"), header=T))
-county.raw <- data.table(read.csv(file=url("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv"), header=T))
+state.raw <- data.table(read.csv(file=url("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv"), header = T))
+county.raw <- data.table(read.csv(file=url("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv"), header = T))
 ```
 
 Add useful fields & local files
@@ -33,8 +33,9 @@ state.raw[, date := as.Date(date)]
 county.raw[, date := as.Date(date)]
 
 # grad stay-at-home dates (manually updated locally)
-stay_dates <- fread("~/covid19/stay_at_home_dates.csv")
+stay_dates <- fread("~/covid19/stay_at_home_dates.csv", header = T)
 stay_dates[, start_date := as.Date(start_date, format = "%Y-%m-%d")]
+stay_dates[, population := as.integer(gsub(",", "", population))]
 ```
 
 
@@ -79,8 +80,8 @@ agg.cases.state.plot
 Confirmed cases -- specific county
 ```{r}
 # adjust state and county name to flow through rest of code (use capitalized full state name)
-use.state <- "California"
-use.county <- "Orange"
+use.state <- "Washington"
+use.county <- "Pierce"
 cases.county <- county.raw[state %in% use.state & county %in% use.county]
 agg.cases.county <- cases.county[order(date),
                           .(total_cases = sum(cases, na.rm = T)),
@@ -136,8 +137,8 @@ agg.deaths.state.plot
 Deaths -- specific county
 ```{r}
 # adjust state and county name to flow through rest of code (use capitalized full state name)
-use.state <- "California"
-use.county <- "Orange"
+use.state <- "Washington"
+use.county <- "Pierce"
 deaths.county <- county.raw[state %in% use.state & county %in% use.county]
 agg.deaths.county <- deaths.county[order(date),
                           .(total_deaths = sum(deaths, na.rm = T)),
@@ -392,44 +393,168 @@ agg.deaths.growth.state.plot
 
 ## Examine state figures per capita
 Table of total confirmed cases per capita (all states)
+```{r}
+state.per.cap <- merge(state.raw, stay_dates, by = "state", all.x = T)
+state.per.cap[, casesPerMillion := as.integer(cases/population * 1000000)]
+date.cut <- max(state.per.cap$date)
+state.per.cap.agg <- state.per.cap[date == date.cut]
+state.per.cap.agg <- state.per.cap.agg[order(-casesPerMillion), c("state", "casesPerMillion")]
+state.per.cap.agg[, casesPerMillion := comma(casesPerMillion)]
+state.per.cap.agg
+```
 
-Plot of total confirmed cases over time (top 10 states as of most recent day's data)
+Plot of total confirmed cases per capita over time (top 10 states as of most recent day's data)
+```{r}
+state.per.cap.agg[, row := .I]
+top.ten <- state.per.cap.agg[row < 11, "state"]
+state.per.cap.series <- state.per.cap[state %in% top.ten$state]
+state.per.cap.plot <- ggplot(state.per.cap.series[date >= "2020-03-01"], aes(x = date, y = casesPerMillion, colour = state)) +
+  geom_line(aes(group = state)) +
+    labs(x = "Date",
+       y = "Total confirmed COVID cases per million residents",
+       title = "Total confirmed COVID cases per million residents",
+       subtitle = paste0("States with 10 highest counts as of ", format(date.cut, "%B %d, %Y"))) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_y_continuous(labels = comma)
+state.per.cap.plot
+```
 
-Table of new cases per capita: rolling 3-day total (all 50 states)
+Table of new cases per capita: rolling 3-day average (all 50 states)
+```{r}
+state.per.cap <- merge(state.raw, stay_dates, by = "state", all.x = T)
+date.cut <- max(state.per.cap$date)
+date.min <- max(state.per.cap$date) - 3
+state.per.cap.agg <- state.per.cap[date == date.cut]
+temp <- state.per.cap[date == date.min]
+state.per.cap.agg[, casesPrev3 := temp$cases[match(state.per.cap.agg$state, temp$state)]]
+state.per.cap.agg[, newCasesPrev3 := (cases - casesPrev3)]
+state.per.cap.agg[, casesNewPerMillion := as.integer(newCasesPrev3/population * 1000000)]
+state.per.cap.agg <- state.per.cap.agg[order(-casesNewPerMillion), c("state", "casesNewPerMillion")]
+state.per.cap.agg[, casesNewPerMillion := comma(casesNewPerMillion)]
+state.per.cap.agg
+```
 
 Plot of new cases per capita: rolling 3-day total (top 10 states as of most recent day's data)
+```{r}
+state.per.cap.agg[, row := .I]
+top.ten <- state.per.cap.agg[row < 11, "state"]
+state.per.cap.series <- state.per.cap[state %in% top.ten$state]
+temp <- state.per.cap.series[, c("state", "date", "cases")]
+setnames(temp, "cases", "casesPrev3")
+state.per.cap.series[, datePrev3 := date - 3]
+state.per.cap.series <- merge(state.per.cap.series, temp, all.x = T, by.x = c("state", "datePrev3"), by.y = c("state", "date"))
+state.per.cap.series[, newCasesPrev3 := (cases - casesPrev3)]
+state.per.cap.series[, casesNewPerMillion := as.integer(newCasesPrev3/population * 1000000)]
+state.per.cap.plot <- ggplot(state.per.cap.series[date >= "2020-03-10"], aes(x = date, y = casesNewPerMillion, colour = state)) +
+  geom_line(aes(group = state)) +
+    labs(x = "Date",
+       y = "New confirmed COVID cases per million residents",
+       title = "New confirmed COVID cases per million resident (3-day rolling average)",
+       subtitle = paste0("States with 10 highest counts as of ", format(date.cut, "%B %d, %Y"))) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_y_continuous(labels = comma)
+state.per.cap.plot
+```
 
 Table of total deaths per capita (all states)
+```{r}
+state.per.cap <- merge(state.raw, stay_dates, by = "state", all.x = T)
+state.per.cap[, deathsPerMillion := as.integer(deaths/population * 1000000)]
+date.cut <- max(state.per.cap$date)
+state.per.cap.agg <- state.per.cap[date == date.cut]
+state.per.cap.agg <- state.per.cap.agg[order(-deathsPerMillion), c("state", "deathsPerMillion")]
+state.per.cap.agg[, deathsPerMillion := comma(deathsPerMillion)]
+state.per.cap.agg
+```
 
 Plot of total deaths per capita over time (top 10 states as of most recent day's data)
+```{r}
+state.per.cap.agg[, row := .I]
+top.ten <- state.per.cap.agg[row < 11, "state"]
+state.per.cap.series <- state.per.cap[state %in% top.ten$state]
+state.per.cap.plot <- ggplot(state.per.cap.series[date >= "2020-03-01"], aes(x = date, y = deathsPerMillion, colour = state)) +
+  geom_line(aes(group = state)) +
+    labs(x = "Date",
+       y = "Total COVID-related deaths per million residents",
+       title = "Total COVID-related deaths per million residents",
+       subtitle = paste0("States with 10 highest counts as of ", format(date.cut, "%B %d, %Y"))) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_y_continuous(labels = comma)
+state.per.cap.plot
+```
 
-Table of new deaths per capita: rolling 3-day total (all 50 states)
+Table of new deaths per capita: rolling 3-day average (all 50 states)
+```{r}
+state.per.cap <- merge(state.raw, stay_dates, by = "state", all.x = T)
+date.cut <- max(state.per.cap$date)
+date.min <- max(state.per.cap$date) - 3
+state.per.cap.agg <- state.per.cap[date == date.cut]
+temp <- state.per.cap[date == date.min]
+state.per.cap.agg[, deathsPrev3 := temp$deaths[match(state.per.cap.agg$state, temp$state)]]
+state.per.cap.agg[, newDeathsPrev3 := (deaths - deathsPrev3)]
+state.per.cap.agg[, deathsNewPerMillion := as.integer(newDeathsPrev3/population * 1000000)]
+state.per.cap.agg <- state.per.cap.agg[order(-deathsNewPerMillion), c("state", "deathsNewPerMillion")]
+state.per.cap.agg[, deathsNewPerMillion := comma(deathsNewPerMillion)]
+state.per.cap.agg
+```
 
 Plot of new deaths per capita over time: rolling 3-day total (top 10 states as of most recent day's data)
+```{r}
+state.per.cap.agg[, row := .I]
+top.ten <- state.per.cap.agg[row < 11, "state"]
+state.per.cap.series <- state.per.cap[state %in% top.ten$state]
+temp <- state.per.cap.series[, c("state", "date", "deaths")]
+setnames(temp, "deaths", "deathsPrev3")
+state.per.cap.series[, datePrev3 := date - 3]
+state.per.cap.series <- merge(state.per.cap.series, temp, all.x = T, by.x = c("state", "datePrev3"), by.y = c("state", "date"))
+state.per.cap.series[, newDeathsPrev3 := (deaths - deathsPrev3)]
+state.per.cap.series[, deathsNewPerMillion := as.integer(newDeathsPrev3/population * 1000000)]
+state.per.cap.plot <- ggplot(state.per.cap.series[date >= "2020-03-10"], aes(x = date, y = deathsNewPerMillion, colour = state)) +
+  geom_line(aes(group = state)) +
+    labs(x = "Date",
+       y = "New COVID-related deaths per million residents",
+       title = "New COVID-related deaths per million resident (3-day rolling average)",
+       subtitle = paste0("States with 10 highest counts as of ", format(date.cut, "%B %d, %Y"))) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+state.per.cap.plot
+```
 
 ## Explore growth rates based on stay-at-home orders
 Confirmed cases
 ```{r}
 state.dt <- state.raw
 state.dt[, stay_date := stay_dates$start_date[match(state.raw$state, stay_dates$state)]]
-state.dt[, flgOrder := ifelse(is.na(stay_date), 0, 1)]
-#state.dt[, flgOrder := ifelse(is.na(stay_date) | stay_date >= date, 0 ,1)]
+state.dt[, population := stay_dates$population[match(state.raw$state, stay_dates$state)]]
+#state.dt[, flgOrder := ifelse(is.na(stay_date), 0, 1)]
+state.dt[, flgOrder := ifelse(is.na(stay_date) | stay_date >= date, "No", "Yes")]
 #state.dt[, ctDaysFromBaseline := ifelse(flgOrder == 0, as.integer(date - as.Date("2020-03-10")),
 #                                         as.integer(date - stay_date))]
-state.dt[, ctDaysFromBaseline := as.integer(date - stay_date)]
+#state.dt[, ctDaysFromBaseline := as.integer(date - stay_date)]
 temp <- state.dt
 temp <- temp[, c("date", "state", "cases")]
 setnames(temp, "cases", "cases_prev3")
 state.dt[, dtPrev3 := date - 3]
 state.dt <- merge(state.raw, temp, all.x = T, by.x = c("state", "dtPrev3"), by.y = c("state", "date"))
-state.dt[, rtGrowth := cases/cases_prev3 - 1]
-state.agg.comp <- state.dt[date >= "2020-03-10" & !state %in% "Puerto Rico" & flgOrder == 1]
-state.agg.comp <- state.agg.comp[order(ctDaysFromBaseline, flgOrder),
-#                                 .(avgRtGrowth = sum(cases, na.rm = T)/sum(cases_prev3, na.rm = T) - 1),
-                          .(avgRtGrowth = mean(rtGrowth, na.rm = T)),
-                           by = c("ctDaysFromBaseline", "flgOrder")]
-state.agg.comp.plot <- ggplot(state.agg.comp, aes(x = ctDaysFromBaseline, y = avgRtGrowth, colour = as.factor(flgOrder))) +
-  geom_point() +
-  geom_line(aes(group = flgOrder))
+state.dt[, casesNewPerMillion := as.integer((cases - cases_prev3)/population * 1000000)]
+state.agg.comp <- state.dt[date >= "2020-03-10" & !state %in% "Puerto Rico"]
+state.agg.comp <- state.agg.comp[order(date, flgOrder),
+                          .(avgNewCases = mean(casesNewPerMillion, na.rm = T),
+                            cts = .N),
+                           by = c("date", "flgOrder")]
+state.agg.comp.plot <- ggplot(state.agg.comp, aes(x = date, y = avgNewCases, colour = as.factor(flgOrder))) +
+  geom_point(aes(size = cts)) +
+  geom_line(aes(group = flgOrder)) +
+    labs(x = "Date",
+       y = "New confirmed COVID cases per million residents",
+       title = "Avg new COVID cases in states with and without stay-at-home order",
+       subtitle = "New cases are a 3-day rolling average per million residents",
+       size = "Count of states",
+       colour = "Stay-at-home order for state") +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
 state.agg.comp.plot
 ```
