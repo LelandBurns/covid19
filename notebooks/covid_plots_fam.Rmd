@@ -17,10 +17,12 @@ date: '`r format(Sys.time(), "%B %d, %Y")`'
 * Within each geophraphy, it shows several plots:
   * Total confirmed cases: This is the cumulative total of cases reported.
   * New confirmed cases: This is the number of new cases reported on each respective date.
-  * Rolling 3-day case growth rate: This is the average daily growth rate in total cases over the previous 3 days. For instance, if it is 100%, then that means total cases are doubling every 3 days. (This isn't shown at the county level because the sample size is too small.)
+  * Rolling 3-day case growth rate: This is the growth rate in both total cases and new over the previous 3 days, shown on a rolling basis for each respective date. For example, a 3-day growth rate of 100% for total cases means that total cases are doubling every 3 days. (This isn't shown at the county level because the sample size is too small.)
+    * For total cases, the rate can't go below zero (because total cases can never go down), but we want it to get as close to zero as possible.
+    * For new cases, the rate can go below zero because we'll eventually start to see less new cases each day consistently. When the new case growth rate is consistently below zero, it means we're on the other side of the "apex."nstance, if it is 100%, then that means total cases are doubling every 3 days.
   * Total deaths: This is the cumulative total of deaths reported
   * New deaths: This is the number of new deaths reported on each respective date
-  * Rolling 3-day death growth rate: This is the average daily growth rate in total deaths over the previous 3 days. For instance, if it is 100%, then that means total deaths are doubling every 3 days. (This isn't shown at the county level because the sample size is too small.)
+  * Rolling 3-day death growth rate: This is the same as described for total and new cases above, but for total and new deaths.
 * Besides this data for each geography, it also includes some additional plots at the end:
   * It shows tables of both total cases and deaths *per million residents* for all states, and then a graph of trends of these numbers for the top 10 states (only using 10 in the graph so it's not too crowded). Showing the numbers per million helps normalize for the size of the states when looking at totals.
   * It then shows these same tables and plots for cases and deaths, but with new cases/deaths per million residents instead of total cases/deaths per million. This section uses a rolling 3-day average of new cases/deaths.
@@ -102,17 +104,29 @@ agg.cases.US <- state.raw[order(date),
                           .(total_cases = sum(cases, na.rm = T)),
                           by = "date"]
 temp <- agg.cases.US
+agg.cases.US[, total_cases_prev := temp$total_cases[match(agg.cases.US$date - 1, temp$date)]]
+agg.cases.US[, total_new_cases := total_cases - total_cases_prev]
+
+temp <- agg.cases.US
 agg.cases.US[, total_cases_prev3 := temp$total_cases[match(agg.cases.US$date - 3, temp$date)]]
 agg.cases.US[, total_cases_rtgrowth := total_cases/total_cases_prev3 - 1]
-agg.cases.growth.US.plot <- ggplot(agg.cases.US[date >= "2020-03-01"], aes(x = date, y = total_cases_rtgrowth)) + 
-  geom_line() +
+agg.cases.US[, new_cases_prev3 := temp$total_new_cases[match(agg.cases.US$date - 3, temp$date)]]
+agg.cases.US[, new_cases_rtgrowth := total_new_cases/new_cases_prev3 - 1]
+
+melt.use <- melt(agg.cases.US[, c("date", "total_cases_rtgrowth", "new_cases_rtgrowth")], id.vars = "date")
+melt.use[, variable := ifelse(variable %in% "total_cases_rtgrowth", "Total Cases", "New Cases")]
+
+agg.cases.growth.US.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = date, y = value, color = variable)) + 
+  geom_line(aes(group = variable)) +
     labs(x = "Date",
        y = "Rate of growth (rolling 3-day window)",
-       title = "Rolling 3-day rate of growth: Total confirmed COVID cases",
-       subtitle = "United States") +
+       title = "Rolling 3-day rate of growth: Confirmed COVID cases",
+       subtitle = "United States",
+       color = "Metric") +
   theme(plot.title = element_text(hjust = 0.5),
         plot.subtitle = element_text(hjust = 0.5)) +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, max(agg.cases.US$total_cases_rtgrowth * 1.1)))
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = 
+                       c(ifelse(min(melt.use$value) > 0, 0, min(melt.use$value)), max(melt.use$value * 1.1)))
 agg.cases.growth.US.plot
 ```
 
@@ -158,17 +172,29 @@ agg.deaths.US <- state.raw[order(date),
                           .(total_deaths = sum(deaths, na.rm = T)),
                           by = "date"]
 temp <- agg.deaths.US
+agg.deaths.US[, total_deaths_prev := temp$total_deaths[match(agg.deaths.US$date - 1, temp$date)]]
+agg.deaths.US[, total_new_deaths := total_deaths - total_deaths_prev]
+
+temp <- agg.deaths.US
 agg.deaths.US[, total_deaths_prev3 := temp$total_deaths[match(agg.deaths.US$date - 3, temp$date)]]
 agg.deaths.US[, total_deaths_rtgrowth := total_deaths/total_deaths_prev3 - 1]
-agg.deaths.growth.US.plot <- ggplot(agg.deaths.US[date >= "2020-03-10"], aes(x = date, y = total_deaths_rtgrowth)) + 
-  geom_line() +
+agg.deaths.US[, new_deaths_prev3 := temp$total_new_deaths[match(agg.deaths.US$date - 3, temp$date)]]
+agg.deaths.US[, new_deaths_rtgrowth := total_new_deaths/new_deaths_prev3 - 1]
+
+melt.use <- melt(agg.deaths.US[, c("date", "total_deaths_rtgrowth", "new_deaths_rtgrowth")], id.vars = "date")
+melt.use[, variable := ifelse(variable %in% "total_deaths_rtgrowth", "Total Deaths", "New Deaths")]
+
+agg.deaths.growth.US.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = date, y = value, color = variable)) + 
+  geom_line(aes(group = variable)) +
     labs(x = "Date",
        y = "Rate of growth (rolling 3-day window)",
-       title = "Rolling 3-day rate of growth: Total COVID-related deaths",
-       subtitle = "United States") +
+       title = "Rolling 3-day rate of growth: Confirmed COVID deaths",
+       subtitle = "United States",
+       color = "Metric") +
   theme(plot.title = element_text(hjust = 0.5),
         plot.subtitle = element_text(hjust = 0.5)) +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, max(agg.deaths.US$total_deaths_rtgrowth * 1.1)))
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = 
+                       c(ifelse(min(melt.use$value) > 0, 0, min(melt.use$value)), max(melt.use$value * 1.1)))
 agg.deaths.growth.US.plot
 ```
 
@@ -223,17 +249,29 @@ agg.cases.state <- cases.state[order(date),
                           .(total_cases = sum(cases, na.rm = T)),
                           by = "date"]
 temp <- agg.cases.state
+agg.cases.state[, total_cases_prev := temp$total_cases[match(agg.cases.state$date - 1, temp$date)]]
+agg.cases.state[, total_new_cases := total_cases - total_cases_prev]
+
+temp <- agg.cases.state
 agg.cases.state[, total_cases_prev3 := temp$total_cases[match(agg.cases.state$date - 3, temp$date)]]
 agg.cases.state[, total_cases_rtgrowth := total_cases/total_cases_prev3 - 1]
-agg.cases.growth.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"], aes(x = date, y = total_cases_rtgrowth)) + 
-  geom_line() +
+agg.cases.state[, new_cases_prev3 := temp$total_new_cases[match(agg.cases.state$date - 3, temp$date)]]
+agg.cases.state[, new_cases_rtgrowth := total_new_cases/new_cases_prev3 - 1]
+
+melt.use <- melt(agg.cases.state[, c("date", "total_cases_rtgrowth", "new_cases_rtgrowth")], id.vars = "date")
+melt.use[, variable := ifelse(variable %in% "total_cases_rtgrowth", "Total Cases", "New Cases")]
+
+agg.cases.growth.state.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = date, y = value, color = variable)) + 
+  geom_line(aes(group = variable)) +
     labs(x = "Date",
        y = "Rate of growth (rolling 3-day window)",
-       title = "Rolling 3-day rate of growth: Total confirmed COVID cases",
-       subtitle = use.state) +
+       title = "Rolling 3-day rate of growth: Confirmed COVID cases",
+       subtitle = use.state,
+       color = "Metric") +
   theme(plot.title = element_text(hjust = 0.5),
         plot.subtitle = element_text(hjust = 0.5)) +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, max(agg.cases.state$total_cases_rtgrowth * 1.1)))
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = 
+                       c(ifelse(min(melt.use$value) > 0, 0, min(melt.use$value)), max(melt.use$value * 1.1)))
 agg.cases.growth.state.plot
 ```
 
@@ -284,17 +322,29 @@ agg.deaths.state <- deaths.state[order(date),
                           .(total_deaths = sum(deaths, na.rm = T)),
                           by = "date"]
 temp <- agg.deaths.state
+agg.deaths.state[, total_deaths_prev := temp$total_deaths[match(agg.deaths.state$date - 1, temp$date)]]
+agg.deaths.state[, total_new_deaths := total_deaths - total_deaths_prev]
+
+temp <- agg.deaths.state
 agg.deaths.state[, total_deaths_prev3 := temp$total_deaths[match(agg.deaths.state$date - 3, temp$date)]]
 agg.deaths.state[, total_deaths_rtgrowth := total_deaths/total_deaths_prev3 - 1]
-agg.deaths.growth.state.plot <- ggplot(agg.deaths.state[date >= "2020-03-10"], aes(x = date, y = total_deaths_rtgrowth)) + 
-  geom_line() +
+agg.deaths.state[, new_deaths_prev3 := temp$total_new_deaths[match(agg.deaths.state$date - 3, temp$date)]]
+agg.deaths.state[, new_deaths_rtgrowth := total_new_deaths/new_deaths_prev3 - 1]
+
+melt.use <- melt(agg.deaths.state[, c("date", "total_deaths_rtgrowth", "new_deaths_rtgrowth")], id.vars = "date")
+melt.use[, variable := ifelse(variable %in% "total_deaths_rtgrowth", "Total Deaths", "New Deaths")]
+
+agg.deaths.growth.state.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = date, y = value, color = variable)) + 
+  geom_line(aes(group = variable)) +
     labs(x = "Date",
        y = "Rate of growth (rolling 3-day window)",
-       title = "Rolling 3-day rate of growth: Total COVID-related deaths",
-       subtitle = use.state) +
+       title = "Rolling 3-day rate of growth: Confirmed COVID deaths",
+       subtitle = use.state,
+       color = "Metric") +
   theme(plot.title = element_text(hjust = 0.5),
         plot.subtitle = element_text(hjust = 0.5)) +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, max(agg.deaths.state$total_deaths_rtgrowth * 1.1)))
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = 
+                       c(ifelse(min(melt.use$value) > 0, 0, min(melt.use$value)), max(melt.use$value * 1.1)))
 agg.deaths.growth.state.plot
 ```
 
@@ -349,18 +399,31 @@ agg.cases.state <- cases.state[order(date),
                           .(total_cases = sum(cases, na.rm = T)),
                           by = "date"]
 temp <- agg.cases.state
+agg.cases.state[, total_cases_prev := temp$total_cases[match(agg.cases.state$date - 1, temp$date)]]
+agg.cases.state[, total_new_cases := total_cases - total_cases_prev]
+
+temp <- agg.cases.state
 agg.cases.state[, total_cases_prev3 := temp$total_cases[match(agg.cases.state$date - 3, temp$date)]]
 agg.cases.state[, total_cases_rtgrowth := total_cases/total_cases_prev3 - 1]
-agg.cases.growth.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"], aes(x = date, y = total_cases_rtgrowth)) + 
-  geom_line() +
+agg.cases.state[, new_cases_prev3 := temp$total_new_cases[match(agg.cases.state$date - 3, temp$date)]]
+agg.cases.state[, new_cases_rtgrowth := total_new_cases/new_cases_prev3 - 1]
+
+melt.use <- melt(agg.cases.state[, c("date", "total_cases_rtgrowth", "new_cases_rtgrowth")], id.vars = "date")
+melt.use[, variable := ifelse(variable %in% "total_cases_rtgrowth", "Total Cases", "New Cases")]
+
+agg.cases.growth.state.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = date, y = value, color = variable)) + 
+  geom_line(aes(group = variable)) +
     labs(x = "Date",
        y = "Rate of growth (rolling 3-day window)",
-       title = "Rolling 3-day rate of growth: Total confirmed COVID cases",
-       subtitle = use.state) +
+       title = "Rolling 3-day rate of growth: Confirmed COVID cases",
+       subtitle = use.state,
+       color = "Metric") +
   theme(plot.title = element_text(hjust = 0.5),
         plot.subtitle = element_text(hjust = 0.5)) +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, max(agg.cases.state$total_cases_rtgrowth * 1.1)))
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = 
+                       c(ifelse(min(melt.use$value) > 0, 0, min(melt.use$value)), max(melt.use$value * 1.1)))
 agg.cases.growth.state.plot
+```
 ```
 
 ### Deaths
@@ -410,17 +473,29 @@ agg.deaths.state <- deaths.state[order(date),
                           .(total_deaths = sum(deaths, na.rm = T)),
                           by = "date"]
 temp <- agg.deaths.state
+agg.deaths.state[, total_deaths_prev := temp$total_deaths[match(agg.deaths.state$date - 1, temp$date)]]
+agg.deaths.state[, total_new_deaths := total_deaths - total_deaths_prev]
+
+temp <- agg.deaths.state
 agg.deaths.state[, total_deaths_prev3 := temp$total_deaths[match(agg.deaths.state$date - 3, temp$date)]]
 agg.deaths.state[, total_deaths_rtgrowth := total_deaths/total_deaths_prev3 - 1]
-agg.deaths.growth.state.plot <- ggplot(agg.deaths.state[date >= "2020-03-10"], aes(x = date, y = total_deaths_rtgrowth)) + 
-  geom_line() +
+agg.deaths.state[, new_deaths_prev3 := temp$total_new_deaths[match(agg.deaths.state$date - 3, temp$date)]]
+agg.deaths.state[, new_deaths_rtgrowth := total_new_deaths/new_deaths_prev3 - 1]
+
+melt.use <- melt(agg.deaths.state[, c("date", "total_deaths_rtgrowth", "new_deaths_rtgrowth")], id.vars = "date")
+melt.use[, variable := ifelse(variable %in% "total_deaths_rtgrowth", "Total Deaths", "New Deaths")]
+
+agg.deaths.growth.state.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = date, y = value, color = variable)) + 
+  geom_line(aes(group = variable)) +
     labs(x = "Date",
        y = "Rate of growth (rolling 3-day window)",
-       title = "Rolling 3-day rate of growth: Total COVID-related deaths",
-       subtitle = use.state) +
+       title = "Rolling 3-day rate of growth: Confirmed COVID deaths",
+       subtitle = use.state,
+       color = "Metric") +
   theme(plot.title = element_text(hjust = 0.5),
         plot.subtitle = element_text(hjust = 0.5)) +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, max(agg.deaths.state$total_deaths_rtgrowth * 1.1)))
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = 
+                       c(ifelse(min(melt.use$value) > 0, 0, min(melt.use$value)), max(melt.use$value * 1.1)))
 agg.deaths.growth.state.plot
 ```
 
@@ -469,24 +544,36 @@ agg.new.cases.state.plot
 ```
 
 ```{r echo = F, message = F, warning = F}
-use.state <- "South Carolina"
 cases.state <- state.raw[state %in% use.state]
 agg.cases.state <- cases.state[order(date),
                           .(total_cases = sum(cases, na.rm = T)),
                           by = "date"]
 temp <- agg.cases.state
+agg.cases.state[, total_cases_prev := temp$total_cases[match(agg.cases.state$date - 1, temp$date)]]
+agg.cases.state[, total_new_cases := total_cases - total_cases_prev]
+
+temp <- agg.cases.state
 agg.cases.state[, total_cases_prev3 := temp$total_cases[match(agg.cases.state$date - 3, temp$date)]]
 agg.cases.state[, total_cases_rtgrowth := total_cases/total_cases_prev3 - 1]
-agg.cases.growth.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"], aes(x = date, y = total_cases_rtgrowth)) + 
-  geom_line() +
+agg.cases.state[, new_cases_prev3 := temp$total_new_cases[match(agg.cases.state$date - 3, temp$date)]]
+agg.cases.state[, new_cases_rtgrowth := total_new_cases/new_cases_prev3 - 1]
+
+melt.use <- melt(agg.cases.state[, c("date", "total_cases_rtgrowth", "new_cases_rtgrowth")], id.vars = "date")
+melt.use[, variable := ifelse(variable %in% "total_cases_rtgrowth", "Total Cases", "New Cases")]
+
+agg.cases.growth.state.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = date, y = value, color = variable)) + 
+  geom_line(aes(group = variable)) +
     labs(x = "Date",
        y = "Rate of growth (rolling 3-day window)",
-       title = "Rolling 3-day rate of growth: Total confirmed COVID cases",
-       subtitle = use.state) +
+       title = "Rolling 3-day rate of growth: Confirmed COVID cases",
+       subtitle = use.state,
+       color = "Metric") +
   theme(plot.title = element_text(hjust = 0.5),
         plot.subtitle = element_text(hjust = 0.5)) +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, max(agg.cases.state$total_cases_rtgrowth * 1.1)))
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = 
+                       c(ifelse(min(melt.use$value) > 0, 0, min(melt.use$value)), max(melt.use$value * 1.1)))
 agg.cases.growth.state.plot
+```
 ```
 
 ### Deaths
@@ -536,17 +623,29 @@ agg.deaths.state <- deaths.state[order(date),
                           .(total_deaths = sum(deaths, na.rm = T)),
                           by = "date"]
 temp <- agg.deaths.state
+agg.deaths.state[, total_deaths_prev := temp$total_deaths[match(agg.deaths.state$date - 1, temp$date)]]
+agg.deaths.state[, total_new_deaths := total_deaths - total_deaths_prev]
+
+temp <- agg.deaths.state
 agg.deaths.state[, total_deaths_prev3 := temp$total_deaths[match(agg.deaths.state$date - 3, temp$date)]]
 agg.deaths.state[, total_deaths_rtgrowth := total_deaths/total_deaths_prev3 - 1]
-agg.deaths.growth.state.plot <- ggplot(agg.deaths.state[date >= "2020-03-10"], aes(x = date, y = total_deaths_rtgrowth)) + 
-  geom_line() +
+agg.deaths.state[, new_deaths_prev3 := temp$total_new_deaths[match(agg.deaths.state$date - 3, temp$date)]]
+agg.deaths.state[, new_deaths_rtgrowth := total_new_deaths/new_deaths_prev3 - 1]
+
+melt.use <- melt(agg.deaths.state[, c("date", "total_deaths_rtgrowth", "new_deaths_rtgrowth")], id.vars = "date")
+melt.use[, variable := ifelse(variable %in% "total_deaths_rtgrowth", "Total Deaths", "New Deaths")]
+
+agg.deaths.growth.state.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = date, y = value, color = variable)) + 
+  geom_line(aes(group = variable)) +
     labs(x = "Date",
        y = "Rate of growth (rolling 3-day window)",
-       title = "Rolling 3-day rate of growth: Total COVID-related deaths",
-       subtitle = use.state) +
+       title = "Rolling 3-day rate of growth: Confirmed COVID deaths",
+       subtitle = use.state,
+       color = "Metric") +
   theme(plot.title = element_text(hjust = 0.5),
         plot.subtitle = element_text(hjust = 0.5)) +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, max(agg.deaths.state$total_deaths_rtgrowth * 1.1)))
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = 
+                       c(ifelse(min(melt.use$value) > 0, 0, min(melt.use$value)), max(melt.use$value * 1.1)))
 agg.deaths.growth.state.plot
 ```
 
@@ -595,23 +694,34 @@ agg.new.cases.state.plot
 ```
 
 ```{r echo = F, message = F, warning = F}
-use.state <- "Tennessee"
 cases.state <- state.raw[state %in% use.state]
 agg.cases.state <- cases.state[order(date),
                           .(total_cases = sum(cases, na.rm = T)),
                           by = "date"]
 temp <- agg.cases.state
+agg.cases.state[, total_cases_prev := temp$total_cases[match(agg.cases.state$date - 1, temp$date)]]
+agg.cases.state[, total_new_cases := total_cases - total_cases_prev]
+
+temp <- agg.cases.state
 agg.cases.state[, total_cases_prev3 := temp$total_cases[match(agg.cases.state$date - 3, temp$date)]]
 agg.cases.state[, total_cases_rtgrowth := total_cases/total_cases_prev3 - 1]
-agg.cases.growth.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"], aes(x = date, y = total_cases_rtgrowth)) + 
-  geom_line() +
+agg.cases.state[, new_cases_prev3 := temp$total_new_cases[match(agg.cases.state$date - 3, temp$date)]]
+agg.cases.state[, new_cases_rtgrowth := total_new_cases/new_cases_prev3 - 1]
+
+melt.use <- melt(agg.cases.state[, c("date", "total_cases_rtgrowth", "new_cases_rtgrowth")], id.vars = "date")
+melt.use[, variable := ifelse(variable %in% "total_cases_rtgrowth", "Total Cases", "New Cases")]
+
+agg.cases.growth.state.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = date, y = value, color = variable)) + 
+  geom_line(aes(group = variable)) +
     labs(x = "Date",
        y = "Rate of growth (rolling 3-day window)",
-       title = "Rolling 3-day rate of growth: Total confirmed COVID cases",
-       subtitle = use.state) +
+       title = "Rolling 3-day rate of growth: Confirmed COVID cases",
+       subtitle = use.state,
+       color = "Metric") +
   theme(plot.title = element_text(hjust = 0.5),
         plot.subtitle = element_text(hjust = 0.5)) +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, max(agg.cases.state$total_cases_rtgrowth * 1.1)))
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = 
+                       c(ifelse(min(melt.use$value) > 0, 0, min(melt.use$value)), max(melt.use$value * 1.1)))
 agg.cases.growth.state.plot
 ```
 
@@ -644,35 +754,27 @@ agg.deaths.state <- deaths.state[order(date),
 temp <- agg.deaths.state
 agg.deaths.state[, total_deaths_prev := temp$total_deaths[match(agg.deaths.state$date - 1, temp$date)]]
 agg.deaths.state[, total_new_deaths := total_deaths - total_deaths_prev]
-agg.new.deaths.state.plot <- ggplot(agg.deaths.state[date >= "2020-03-01"], aes(x = date, y = total_new_deaths)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "New COVID-related deaths",
-       title = "New COVID-related deaths by day",
-       subtitle = use.state) +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5))
-agg.new.deaths.state.plot
-```
 
-```{r echo = F, message = F, warning = F}
-use.state <- "Tennessee"
-deaths.state <- state.raw[state %in% use.state]
-agg.deaths.state <- deaths.state[order(date),
-                          .(total_deaths = sum(deaths, na.rm = T)),
-                          by = "date"]
 temp <- agg.deaths.state
 agg.deaths.state[, total_deaths_prev3 := temp$total_deaths[match(agg.deaths.state$date - 3, temp$date)]]
 agg.deaths.state[, total_deaths_rtgrowth := total_deaths/total_deaths_prev3 - 1]
-agg.deaths.growth.state.plot <- ggplot(agg.deaths.state[date >= "2020-03-10"], aes(x = date, y = total_deaths_rtgrowth)) + 
-  geom_line() +
+agg.deaths.state[, new_deaths_prev3 := temp$total_new_deaths[match(agg.deaths.state$date - 3, temp$date)]]
+agg.deaths.state[, new_deaths_rtgrowth := total_new_deaths/new_deaths_prev3 - 1]
+
+melt.use <- melt(agg.deaths.state[, c("date", "total_deaths_rtgrowth", "new_deaths_rtgrowth")], id.vars = "date")
+melt.use[, variable := ifelse(variable %in% "total_deaths_rtgrowth", "Total Deaths", "New Deaths")]
+
+agg.deaths.growth.state.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = date, y = value, color = variable)) + 
+  geom_line(aes(group = variable)) +
     labs(x = "Date",
        y = "Rate of growth (rolling 3-day window)",
-       title = "Rolling 3-day rate of growth: Total COVID-related deaths",
-       subtitle = use.state) +
+       title = "Rolling 3-day rate of growth: Confirmed COVID deaths",
+       subtitle = use.state,
+       color = "Metric") +
   theme(plot.title = element_text(hjust = 0.5),
         plot.subtitle = element_text(hjust = 0.5)) +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, max(agg.deaths.state$total_deaths_rtgrowth * 1.1)))
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = 
+                       c(ifelse(min(melt.use$value) > 0, 0, min(melt.use$value)), max(melt.use$value * 1.1)))
 agg.deaths.growth.state.plot
 ```
 
