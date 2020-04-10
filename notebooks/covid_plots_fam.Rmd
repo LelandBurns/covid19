@@ -551,8 +551,8 @@ state.per.cap.plot
 
 #### Confirmed cases
 
-Table showing total cases per million and percentile for all US counties
-Includes our counties and the top 5 in the US for perspective
+Table showing total cases per million and percentile for all US counties.
+Includes our counties and the top 5 in the US for perspective.
 ```{r  echo = F, message = F, warning = F}
 # merge county raw and county pop
 county.per.cap <- merge(county.raw, county_pop, all.x = T, by.x = c("county", "state"), by.y = c("CTYNAME", "STNAME"))
@@ -615,8 +615,8 @@ plot.county.per.cap
 
 #### Deaths
 
-Table showing total deaths per million and percentile for all US counties
-Includes our counties and the top 5 in the US for perspective
+Table showing total deaths per million and percentile for all US counties.
+Includes our counties and the top 5 in the US for perspective.
 ```{r  echo = F, message = F, warning = F}
 county.per.cap <- merge(county.raw, county_pop, all.x = T, by.x = c("county", "state"), by.y = c("CTYNAME", "STNAME"))
 county.per.cap[, deathsPerMillion := round(deaths/POPESTIMATE2019 * 1000000, 2)]
