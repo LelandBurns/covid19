@@ -3,31 +3,34 @@ title: "Covid plots for family"
 output:
   html_document:
     toc: true
-    toc_depth: 3
+    toc_depth: 4
     fig_width: 10
-  pdf_document:
-    toc: true
-    toc_depth: 3
+    code_folding: "hide"
 date: '`r format(Sys.time(), "%B %d, %Y")`'
 ---
 
 ## Background
-* This page shows COVID data broken down into regions that affect our family. It pulls from publicly available raw data from the NY Times, which is reported daily. It's on a one-day lag, so when you see this report, the most recent day included while be the day prior.
-* The page is mostly organized by geography: It starts by showing data for all of the U.S., followed by our respective states, followed by our respective counties.
-* Within each geophraphy, it shows several plots:
+Notes and format last updated Apr 9, 2020
+
+* This page shows COVID data broken down into regions that affect our family. It pulls from publicly available raw data from the NY Times, which is reported daily. It's on a one-day lag, so when you see this report, the most recent day included will be the day prior.
+
+* The page starts by showing growth rates. I've moved down the raw numbers to later in the page because you can see them everywhere, and it's sometimes hard to understand trends looking at them. Growth rates seem to me to be more important for understanding our progress.
+  * For the U.S. and each of our states, we show two growth rate charts: confirmed cases (total and new) and deaths (total and new). Each chart has two lines: a growth-rate in the rolling three-day *total* of cases (or deaths) and a growth rate in a rolling three-day average of *new* cases (or deaths).
+    * For total cases (or deaths), the charts show the growth rate in total cases (or deaths) over the previous three days for each respective date. For example, a three-day growth rate of 100% for total cases means that total cases are doubling every three days. This rate can't go below zero (because total cases (or deaths) can never go down), but we want it to get as close to zero as possible.
+    * For new cases (or deaths), the charts show the daily growth rate in the average number of new cases (or deaths) for the previous three days. This rate can go below zero because we'll eventually start to see consistently less new cases (or deaths) each day. When the new case (or death) growth rate is consistently below zero, it means we're on the other side of the "apex."
+
+* The page then shows state and county rankings normalized for population (number of cases or deaths per million residents).
+  * For states, it shows tables ranking all 50 states for per populations rates of total cases, new cases, total deaths, and new deaths. In addition to the tables, the trends for the top states are plotted over time.
+  * For counties, it shows tables with our counties ranked by percentile of U.S. counties for per population rates of total cases and total deaths. The table also shows the top counties in the country for perspecive. And there is then a plot showing our counties' percentiles over time.
+
+* There is then a long section with raw counts for the U.S., our states, and our counties for each of these categories:
   * Total confirmed cases: This is the cumulative total of cases reported.
   * New confirmed cases: This is the number of new cases reported on each respective date.
-  * Rolling 3-day case growth rate: This is the growth rate in both total cases and new over the previous 3 days, shown on a rolling basis for each respective date. For example, a 3-day growth rate of 100% for total cases means that total cases are doubling every 3 days. (This isn't shown at the county level because the sample size is too small.)
-    * For total cases, the rate can't go below zero (because total cases can never go down), but we want it to get as close to zero as possible.
-    * For new cases, the rate can go below zero because we'll eventually start to see less new cases each day consistently. When the new case growth rate is consistently below zero, it means we're on the other side of the "apex."nstance, if it is 100%, then that means total cases are doubling every 3 days.
-  * Total deaths: This is the cumulative total of deaths reported
-  * New deaths: This is the number of new deaths reported on each respective date
-  * Rolling 3-day death growth rate: This is the same as described for total and new cases above, but for total and new deaths.
-* Besides this data for each geography, it also includes some additional plots at the end:
-  * It shows tables of both total cases and deaths *per million residents* for all states, and then a graph of trends of these numbers for the top 10 states (only using 10 in the graph so it's not too crowded). Showing the numbers per million helps normalize for the size of the states when looking at totals.
-  * It then shows these same tables and plots for cases and deaths, but with new cases/deaths per million residents instead of total cases/deaths per million. This section uses a rolling 3-day average of new cases/deaths.
-  * Finally, it shows the same rolling 3-day average of new cases per million residents, but broken out by states that have enacted stay-at-home orders and when the orders were enacted.
-  
+  * Total deaths: This is the cumulative total of deaths reported.
+  * New deaths: This is the number of new deaths reported on each respective date.
+  * Rolling three-day death growth rate: This is the same as described for total and new cases above, but for total and new deaths.
+
+* Finally, the last section compares data from states that have and have not enacted state-wide stay-at-home orders, trying to see if there are any effects of the orders. It's a work in progress, and there are more extensive notes in that section.
 
 ```{r include = F, results = 'hide'}
 # load packages
@@ -42,6 +45,7 @@ library(graphics)
 
 # turn off scientific notation
 options(scipen = 999)
+
 ```
 
 ```{r include = F, results = 'hide'}
@@ -54,64 +58,36 @@ county.raw <- data.table(read.csv(file=url("https://raw.githubusercontent.com/ny
 state.raw[, date := as.Date(date)]
 county.raw[, date := as.Date(date)]
 
-# grad stay-at-home dates (manually updated locally)
+# stay-at-home dates (manually updated locally)
 stay_dates <- fread("~/covid19/raw_data/stay_at_home_dates.csv", header = T)
 stay_dates[, start_date := as.Date(start_date, format = "%Y-%m-%d")]
 stay_dates[, population := as.integer(gsub(",", "", population))]
+
+# county populations
+county_pop <- fread("~/covid19/raw_data/county_pop_data.csv", header = T)
+# county_pop <- county_pop[grep("County", CTYNAME)]
+county_pop[, CTYNAME := gsub("(.*) County", "\\1", CTYNAME)]
 ```
 
-## United States
+## Growth rates
 
-### Confirmed cases
+### Confirmed cases (total and new)
 
-```{r echo = F, message = F, warning = F}
+#### U.S.
+
+```{r message = F, warning = F}
 agg.cases.US <- state.raw[order(date),
                           .(total_cases = sum(cases, na.rm = T)),
                           by = "date"]
-agg.cases.US.plot <- ggplot(agg.cases.US[date >= "2020-03-01"], aes(x = date, y = total_cases)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "Total confirmed COVID cases",
-       title = "Total confirmed COVID cases",
-       subtitle = "United States") +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5)) +
-  scale_y_continuous(labels = comma)
-agg.cases.US.plot
-```
-
-```{r echo = F, message = F, warning = F}
-agg.cases.US <- state.raw[order(date),
-                          .(total_cases = sum(cases, na.rm = T)),
-                          by = "date"]
-temp <- agg.cases.US
-agg.cases.US[, total_cases_prev := temp$total_cases[match(agg.cases.US$date - 1, temp$date)]]
-agg.cases.US[, total_new_cases := total_cases - total_cases_prev]
-agg.new.cases.US.plot <- ggplot(agg.cases.US[date >= "2020-03-01"], aes(x = date, y = total_new_cases)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "Confirmed new COVID cases",
-       title = "Confirmed new COVID cases by day",
-       subtitle = "United States") +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5)) +
-  scale_y_continuous(labels = comma)
-agg.new.cases.US.plot
-```
-
-```{r echo = F, message = F, warning = F}
-agg.cases.US <- state.raw[order(date),
-                          .(total_cases = sum(cases, na.rm = T)),
-                          by = "date"]
-temp <- agg.cases.US
-agg.cases.US[, total_cases_prev := temp$total_cases[match(agg.cases.US$date - 1, temp$date)]]
-agg.cases.US[, total_new_cases := total_cases - total_cases_prev]
 
 temp <- agg.cases.US
 agg.cases.US[, total_cases_prev3 := temp$total_cases[match(agg.cases.US$date - 3, temp$date)]]
 agg.cases.US[, total_cases_rtgrowth := total_cases/total_cases_prev3 - 1]
-agg.cases.US[, new_cases_prev3 := temp$total_new_cases[match(agg.cases.US$date - 3, temp$date)]]
-agg.cases.US[, new_cases_rtgrowth := total_new_cases/new_cases_prev3 - 1]
+agg.cases.US[, new_cases_prev3 := total_cases - total_cases_prev3]
+
+temp <- agg.cases.US
+agg.cases.US[, new_cases_prev3_last := temp$new_cases_prev3[match(agg.cases.US$date - 1, temp$date)]]
+agg.cases.US[, new_cases_rtgrowth := new_cases_prev3/new_cases_prev3_last - 1]
 
 melt.use <- melt(agg.cases.US[, c("date", "total_cases_rtgrowth", "new_cases_rtgrowth")], id.vars = "date")
 melt.use[, variable := ifelse(variable %in% "total_cases_rtgrowth", "Total Cases", "New Cases")]
@@ -130,56 +106,157 @@ agg.cases.growth.US.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = date,
 agg.cases.growth.US.plot
 ```
 
-### Deaths
+#### Our states
 
-```{r echo = F, message = F, warning = F}
-agg.deaths.US <- state.raw[order(date),
-                          .(total_deaths = sum(deaths, na.rm = T)),
+```{r message = F, warning = F}
+use.state <- "Washington"
+cases.state <- state.raw[state %in% use.state]
+agg.cases.state <- cases.state[order(date),
+                          .(total_cases = sum(cases, na.rm = T)),
                           by = "date"]
-agg.deaths.US.plot <- ggplot(agg.deaths.US[date >= "2020-03-01"], aes(x = date, y = total_deaths)) + 
-  geom_bar(stat = "identity") +
+
+temp <- agg.cases.state
+agg.cases.state[, total_cases_prev3 := temp$total_cases[match(agg.cases.state$date - 3, temp$date)]]
+agg.cases.state[, total_cases_rtgrowth := total_cases/total_cases_prev3 - 1]
+agg.cases.state[, new_cases_prev3 := total_cases - total_cases_prev3]
+
+temp <- agg.cases.state
+agg.cases.state[, new_cases_prev3_last := temp$new_cases_prev3[match(agg.cases.state$date - 1, temp$date)]]
+agg.cases.state[, new_cases_rtgrowth := new_cases_prev3/new_cases_prev3_last - 1]
+
+melt.use <- melt(agg.cases.state[, c("date", "total_cases_rtgrowth", "new_cases_rtgrowth")], id.vars = "date")
+melt.use[, variable := ifelse(variable %in% "total_cases_rtgrowth", "Total Cases", "New Cases")]
+
+agg.cases.growth.state.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = date, y = value, color = variable)) + 
+  geom_line(aes(group = variable)) +
     labs(x = "Date",
-       y = "Total COVID-related deaths",
-       title = "Total COVID-related deaths",
-       subtitle = "United States") +
+       y = "Rate of growth (rolling 3-day window)",
+       title = "Rolling 3-day rate of growth: Confirmed COVID cases",
+       subtitle = use.state,
+       color = "Metric") +
   theme(plot.title = element_text(hjust = 0.5),
         plot.subtitle = element_text(hjust = 0.5)) +
-  scale_y_continuous(labels = comma)
-agg.deaths.US.plot
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = 
+                       c(ifelse(min(melt.use$value) > 0, 0, min(melt.use$value)), max(melt.use$value * 1.1)))
+agg.cases.growth.state.plot
 ```
 
-```{r echo = F, message = F, warning = F}
-agg.deaths.US <- state.raw[order(date),
-                          .(total_deaths = sum(deaths, na.rm = T)),
+```{r message = F, warning = F}
+use.state <- "California"
+cases.state <- state.raw[state %in% use.state]
+agg.cases.state <- cases.state[order(date),
+                          .(total_cases = sum(cases, na.rm = T)),
                           by = "date"]
-temp <- agg.deaths.US
-agg.deaths.US[, total_deaths_prev := temp$total_deaths[match(agg.deaths.US$date - 1, temp$date)]]
-agg.deaths.US[, total_new_deaths := total_deaths - total_deaths_prev]
-agg.new.deaths.US.plot <- ggplot(agg.deaths.US[date >= "2020-03-01"], aes(x = date, y = total_new_deaths)) + 
-  geom_bar(stat = "identity") +
+
+temp <- agg.cases.state
+agg.cases.state[, total_cases_prev3 := temp$total_cases[match(agg.cases.state$date - 3, temp$date)]]
+agg.cases.state[, total_cases_rtgrowth := total_cases/total_cases_prev3 - 1]
+agg.cases.state[, new_cases_prev3 := total_cases - total_cases_prev3]
+
+temp <- agg.cases.state
+agg.cases.state[, new_cases_prev3_last := temp$new_cases_prev3[match(agg.cases.state$date - 1, temp$date)]]
+agg.cases.state[, new_cases_rtgrowth := new_cases_prev3/new_cases_prev3_last - 1]
+
+melt.use <- melt(agg.cases.state[, c("date", "total_cases_rtgrowth", "new_cases_rtgrowth")], id.vars = "date")
+melt.use[, variable := ifelse(variable %in% "total_cases_rtgrowth", "Total Cases", "New Cases")]
+
+agg.cases.growth.state.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = date, y = value, color = variable)) + 
+  geom_line(aes(group = variable)) +
     labs(x = "Date",
-       y = "New COVID-related deaths",
-       title = "New COVID-related deaths by day",
-       subtitle = "United States") +
+       y = "Rate of growth (rolling 3-day window)",
+       title = "Rolling 3-day rate of growth: Confirmed COVID cases",
+       subtitle = use.state,
+       color = "Metric") +
   theme(plot.title = element_text(hjust = 0.5),
         plot.subtitle = element_text(hjust = 0.5)) +
-  scale_y_continuous(labels = comma)
-agg.new.deaths.US.plot
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = 
+                       c(ifelse(min(melt.use$value) > 0, 0, min(melt.use$value)), max(melt.use$value * 1.1)))
+agg.cases.growth.state.plot
 ```
 
-```{r echo = F, message = F, warning = F}
+```{r message = F, warning = F}
+use.state <- "South Carolina"
+cases.state <- state.raw[state %in% use.state]
+agg.cases.state <- cases.state[order(date),
+                          .(total_cases = sum(cases, na.rm = T)),
+                          by = "date"]
+
+temp <- agg.cases.state
+agg.cases.state[, total_cases_prev3 := temp$total_cases[match(agg.cases.state$date - 3, temp$date)]]
+agg.cases.state[, total_cases_rtgrowth := total_cases/total_cases_prev3 - 1]
+agg.cases.state[, new_cases_prev3 := total_cases - total_cases_prev3]
+
+temp <- agg.cases.state
+agg.cases.state[, new_cases_prev3_last := temp$new_cases_prev3[match(agg.cases.state$date - 1, temp$date)]]
+agg.cases.state[, new_cases_rtgrowth := new_cases_prev3/new_cases_prev3_last - 1]
+
+melt.use <- melt(agg.cases.state[, c("date", "total_cases_rtgrowth", "new_cases_rtgrowth")], id.vars = "date")
+melt.use[, variable := ifelse(variable %in% "total_cases_rtgrowth", "Total Cases", "New Cases")]
+
+agg.cases.growth.state.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = date, y = value, color = variable)) + 
+  geom_line(aes(group = variable)) +
+    labs(x = "Date",
+       y = "Rate of growth (rolling 3-day window)",
+       title = "Rolling 3-day rate of growth: Confirmed COVID cases",
+       subtitle = use.state,
+       color = "Metric") +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = 
+                       c(ifelse(min(melt.use$value) > 0, 0, min(melt.use$value)), max(melt.use$value * 1.1)))
+agg.cases.growth.state.plot
+```
+
+```{r message = F, warning = F}
+use.state <- "Tennessee"
+cases.state <- state.raw[state %in% use.state]
+agg.cases.state <- cases.state[order(date),
+                          .(total_cases = sum(cases, na.rm = T)),
+                          by = "date"]
+
+temp <- agg.cases.state
+agg.cases.state[, total_cases_prev3 := temp$total_cases[match(agg.cases.state$date - 3, temp$date)]]
+agg.cases.state[, total_cases_rtgrowth := total_cases/total_cases_prev3 - 1]
+agg.cases.state[, new_cases_prev3 := total_cases - total_cases_prev3]
+
+temp <- agg.cases.state
+agg.cases.state[, new_cases_prev3_last := temp$new_cases_prev3[match(agg.cases.state$date - 1, temp$date)]]
+agg.cases.state[, new_cases_rtgrowth := new_cases_prev3/new_cases_prev3_last - 1]
+
+melt.use <- melt(agg.cases.state[, c("date", "total_cases_rtgrowth", "new_cases_rtgrowth")], id.vars = "date")
+melt.use[, variable := ifelse(variable %in% "total_cases_rtgrowth", "Total Cases", "New Cases")]
+
+agg.cases.growth.state.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = date, y = value, color = variable)) + 
+  geom_line(aes(group = variable)) +
+    labs(x = "Date",
+       y = "Rate of growth (rolling 3-day window)",
+       title = "Rolling 3-day rate of growth: Confirmed COVID cases",
+       subtitle = use.state,
+       color = "Metric") +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = 
+                       c(ifelse(min(melt.use$value) > 0, 0, min(melt.use$value)), max(melt.use$value * 1.1)))
+agg.cases.growth.state.plot
+```
+
+### Deaths (total and new)
+
+#### U.S.
+
+```{r message = F, warning = F}
 agg.deaths.US <- state.raw[order(date),
                           .(total_deaths = sum(deaths, na.rm = T)),
                           by = "date"]
-temp <- agg.deaths.US
-agg.deaths.US[, total_deaths_prev := temp$total_deaths[match(agg.deaths.US$date - 1, temp$date)]]
-agg.deaths.US[, total_new_deaths := total_deaths - total_deaths_prev]
 
 temp <- agg.deaths.US
 agg.deaths.US[, total_deaths_prev3 := temp$total_deaths[match(agg.deaths.US$date - 3, temp$date)]]
 agg.deaths.US[, total_deaths_rtgrowth := total_deaths/total_deaths_prev3 - 1]
-agg.deaths.US[, new_deaths_prev3 := temp$total_new_deaths[match(agg.deaths.US$date - 3, temp$date)]]
-agg.deaths.US[, new_deaths_rtgrowth := total_new_deaths/new_deaths_prev3 - 1]
+agg.deaths.US[, new_deaths_prev3 := total_deaths - total_deaths_prev3]
+
+temp <- agg.deaths.US
+agg.deaths.US[, new_deaths_prev3_last := temp$new_deaths_prev3[match(agg.deaths.US$date - 1, temp$date)]]
+agg.deaths.US[, new_deaths_rtgrowth := new_deaths_prev3/new_deaths_prev3_last - 1]
 
 melt.use <- melt(agg.deaths.US[, c("date", "total_deaths_rtgrowth", "new_deaths_rtgrowth")], id.vars = "date")
 melt.use[, variable := ifelse(variable %in% "total_deaths_rtgrowth", "Total Deaths", "New Deaths")]
@@ -198,138 +275,23 @@ agg.deaths.growth.US.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = date
 agg.deaths.growth.US.plot
 ```
 
-## Washington
+#### Our states
 
-### Confirmed cases
-
-```{r echo = F, message = F, warning = F}
-# adjust state name to flow through rest of code (use capitalized full state name)
-use.state <- "Washington"
-cases.state <- state.raw[state %in% use.state]
-agg.cases.state <- cases.state[order(date),
-                          .(total_cases = sum(cases, na.rm = T)),
-                          by = "date"]
-agg.cases.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"], aes(x = date, y = total_cases)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "Total confirmed COVID cases",
-       title = "Total confirmed COVID cases",
-       subtitle = use.state) +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5)) +
-  scale_y_continuous(labels = comma)
-agg.cases.state.plot
-```
-
-```{r echo = F, message = F, warning = F}
-use.state <- "Washington"
-cases.state <- state.raw[state %in% use.state]
-agg.cases.state <- cases.state[order(date),
-                          .(total_cases = sum(cases, na.rm = T)),
-                          by = "date"]
-temp <- agg.cases.state
-agg.cases.state[, total_cases_prev := temp$total_cases[match(agg.cases.state$date - 1, temp$date)]]
-agg.cases.state[, total_new_cases := total_cases - total_cases_prev]
-agg.new.cases.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"], aes(x = date, y = total_new_cases)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "Confirmed new COVID cases",
-       title = "Confirmed new COVID cases by day",
-       subtitle = use.state) +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5)) +
-  scale_y_continuous(labels = comma)
-agg.new.cases.state.plot
-```
-
-```{r echo = F, message = F, warning = F}
-use.state <- "Washington"
-cases.state <- state.raw[state %in% use.state]
-agg.cases.state <- cases.state[order(date),
-                          .(total_cases = sum(cases, na.rm = T)),
-                          by = "date"]
-temp <- agg.cases.state
-agg.cases.state[, total_cases_prev := temp$total_cases[match(agg.cases.state$date - 1, temp$date)]]
-agg.cases.state[, total_new_cases := total_cases - total_cases_prev]
-
-temp <- agg.cases.state
-agg.cases.state[, total_cases_prev3 := temp$total_cases[match(agg.cases.state$date - 3, temp$date)]]
-agg.cases.state[, total_cases_rtgrowth := total_cases/total_cases_prev3 - 1]
-agg.cases.state[, new_cases_prev3 := temp$total_new_cases[match(agg.cases.state$date - 3, temp$date)]]
-agg.cases.state[, new_cases_rtgrowth := total_new_cases/new_cases_prev3 - 1]
-
-melt.use <- melt(agg.cases.state[, c("date", "total_cases_rtgrowth", "new_cases_rtgrowth")], id.vars = "date")
-melt.use[, variable := ifelse(variable %in% "total_cases_rtgrowth", "Total Cases", "New Cases")]
-
-agg.cases.growth.state.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = date, y = value, color = variable)) + 
-  geom_line(aes(group = variable)) +
-    labs(x = "Date",
-       y = "Rate of growth (rolling 3-day window)",
-       title = "Rolling 3-day rate of growth: Confirmed COVID cases",
-       subtitle = use.state,
-       color = "Metric") +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5)) +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = 
-                       c(ifelse(min(melt.use$value) > 0, 0, min(melt.use$value)), max(melt.use$value * 1.1)))
-agg.cases.growth.state.plot
-```
-
-### Deaths
-
-```{r echo = F, message = F, warning = F}
-# adjust state name to flow through rest of code (use capitalized full state name)
-use.state <- "Washington"
-deaths.state <- state.raw[state %in% use.state]
-agg.deaths.state <- cases.state[order(date),
-                          .(total_deaths = sum(deaths, na.rm = T)),
-                          by = "date"]
-agg.deaths.state.plot <- ggplot(agg.deaths.state[date >= "2020-03-01"], aes(x = date, y = total_deaths)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "Total COVID-related deaths",
-       title = "Total COVID-related deaths",
-       subtitle = use.state) +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5))
-agg.deaths.state.plot
-```
-
-```{r echo = F, message = F, warning = F}
+```{r message = F, warning = F}
 use.state <- "Washington"
 deaths.state <- state.raw[state %in% use.state]
 agg.deaths.state <- deaths.state[order(date),
                           .(total_deaths = sum(deaths, na.rm = T)),
                           by = "date"]
-temp <- agg.deaths.state
-agg.deaths.state[, total_deaths_prev := temp$total_deaths[match(agg.deaths.state$date - 1, temp$date)]]
-agg.deaths.state[, total_new_deaths := total_deaths - total_deaths_prev]
-agg.new.deaths.state.plot <- ggplot(agg.deaths.state[date >= "2020-03-01"], aes(x = date, y = total_new_deaths)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "New COVID-related deaths",
-       title = "New COVID-related deaths by day",
-       subtitle = use.state) +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5))
-agg.new.deaths.state.plot
-```
-
-```{r echo = F, message = F, warning = F}
-use.state <- "Washington"
-deaths.state <- state.raw[state %in% use.state]
-agg.deaths.state <- deaths.state[order(date),
-                          .(total_deaths = sum(deaths, na.rm = T)),
-                          by = "date"]
-temp <- agg.deaths.state
-agg.deaths.state[, total_deaths_prev := temp$total_deaths[match(agg.deaths.state$date - 1, temp$date)]]
-agg.deaths.state[, total_new_deaths := total_deaths - total_deaths_prev]
 
 temp <- agg.deaths.state
 agg.deaths.state[, total_deaths_prev3 := temp$total_deaths[match(agg.deaths.state$date - 3, temp$date)]]
 agg.deaths.state[, total_deaths_rtgrowth := total_deaths/total_deaths_prev3 - 1]
-agg.deaths.state[, new_deaths_prev3 := temp$total_new_deaths[match(agg.deaths.state$date - 3, temp$date)]]
-agg.deaths.state[, new_deaths_rtgrowth := total_new_deaths/new_deaths_prev3 - 1]
+agg.deaths.state[, new_deaths_prev3 := total_deaths - total_deaths_prev3]
+
+temp <- agg.deaths.state
+agg.deaths.state[, new_deaths_prev3_last := temp$new_deaths_prev3[match(agg.deaths.state$date - 1, temp$date)]]
+agg.deaths.state[, new_deaths_rtgrowth := new_deaths_prev3/new_deaths_prev3_last - 1]
 
 melt.use <- melt(agg.deaths.state[, c("date", "total_deaths_rtgrowth", "new_deaths_rtgrowth")], id.vars = "date")
 melt.use[, variable := ifelse(variable %in% "total_deaths_rtgrowth", "Total Deaths", "New Deaths")]
@@ -348,139 +310,21 @@ agg.deaths.growth.state.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = d
 agg.deaths.growth.state.plot
 ```
 
-## California
-
-### Confirmed cases
-
-```{r echo = F, message = F, warning = F}
-# adjust state name to flow through rest of code (use capitalized full state name)
-use.state <- "California"
-cases.state <- state.raw[state %in% use.state]
-agg.cases.state <- cases.state[order(date),
-                          .(total_cases = sum(cases, na.rm = T)),
-                          by = "date"]
-agg.cases.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"], aes(x = date, y = total_cases)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "Total confirmed COVID cases",
-       title = "Total confirmed COVID cases",
-       subtitle = use.state) +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5)) +
-  scale_y_continuous(labels = comma)
-agg.cases.state.plot
-```
-
-```{r echo = F, message = F, warning = F}
-use.state <- "California"
-cases.state <- state.raw[state %in% use.state]
-agg.cases.state <- cases.state[order(date),
-                          .(total_cases = sum(cases, na.rm = T)),
-                          by = "date"]
-temp <- agg.cases.state
-agg.cases.state[, total_cases_prev := temp$total_cases[match(agg.cases.state$date - 1, temp$date)]]
-agg.cases.state[, total_new_cases := total_cases - total_cases_prev]
-agg.new.cases.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"], aes(x = date, y = total_new_cases)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "Confirmed new COVID cases",
-       title = "Confirmed new COVID cases by day",
-       subtitle = use.state) +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5)) +
-  scale_y_continuous(labels = comma)
-agg.new.cases.state.plot
-```
-
-```{r echo = F, message = F, warning = F}
-use.state <- "California"
-cases.state <- state.raw[state %in% use.state]
-agg.cases.state <- cases.state[order(date),
-                          .(total_cases = sum(cases, na.rm = T)),
-                          by = "date"]
-temp <- agg.cases.state
-agg.cases.state[, total_cases_prev := temp$total_cases[match(agg.cases.state$date - 1, temp$date)]]
-agg.cases.state[, total_new_cases := total_cases - total_cases_prev]
-
-temp <- agg.cases.state
-agg.cases.state[, total_cases_prev3 := temp$total_cases[match(agg.cases.state$date - 3, temp$date)]]
-agg.cases.state[, total_cases_rtgrowth := total_cases/total_cases_prev3 - 1]
-agg.cases.state[, new_cases_prev3 := temp$total_new_cases[match(agg.cases.state$date - 3, temp$date)]]
-agg.cases.state[, new_cases_rtgrowth := total_new_cases/new_cases_prev3 - 1]
-
-melt.use <- melt(agg.cases.state[, c("date", "total_cases_rtgrowth", "new_cases_rtgrowth")], id.vars = "date")
-melt.use[, variable := ifelse(variable %in% "total_cases_rtgrowth", "Total Cases", "New Cases")]
-
-agg.cases.growth.state.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = date, y = value, color = variable)) + 
-  geom_line(aes(group = variable)) +
-    labs(x = "Date",
-       y = "Rate of growth (rolling 3-day window)",
-       title = "Rolling 3-day rate of growth: Confirmed COVID cases",
-       subtitle = use.state,
-       color = "Metric") +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5)) +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = 
-                       c(ifelse(min(melt.use$value) > 0, 0, min(melt.use$value)), max(melt.use$value * 1.1)))
-agg.cases.growth.state.plot
-```
-```
-
-### Deaths
-
-```{r echo = F, message = F, warning = F}
-# adjust state name to flow through rest of code (use capitalized full state name)
-use.state <- "California"
-deaths.state <- state.raw[state %in% use.state]
-agg.deaths.state <- cases.state[order(date),
-                          .(total_deaths = sum(deaths, na.rm = T)),
-                          by = "date"]
-agg.deaths.state.plot <- ggplot(agg.deaths.state[date >= "2020-03-01"], aes(x = date, y = total_deaths)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "Total COVID-related deaths",
-       title = "Total COVID-related deaths",
-       subtitle = use.state) +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5))
-agg.deaths.state.plot
-```
-
-```{r echo = F, message = F, warning = F}
+```{r message = F, warning = F}
 use.state <- "California"
 deaths.state <- state.raw[state %in% use.state]
 agg.deaths.state <- deaths.state[order(date),
                           .(total_deaths = sum(deaths, na.rm = T)),
                           by = "date"]
-temp <- agg.deaths.state
-agg.deaths.state[, total_deaths_prev := temp$total_deaths[match(agg.deaths.state$date - 1, temp$date)]]
-agg.deaths.state[, total_new_deaths := total_deaths - total_deaths_prev]
-agg.new.deaths.state.plot <- ggplot(agg.deaths.state[date >= "2020-03-01"], aes(x = date, y = total_new_deaths)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "New COVID-related deaths",
-       title = "New COVID-related deaths by day",
-       subtitle = use.state) +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5))
-agg.new.deaths.state.plot
-```
-
-```{r echo = F, message = F, warning = F}
-use.state <- "California"
-deaths.state <- state.raw[state %in% use.state]
-agg.deaths.state <- deaths.state[order(date),
-                          .(total_deaths = sum(deaths, na.rm = T)),
-                          by = "date"]
-temp <- agg.deaths.state
-agg.deaths.state[, total_deaths_prev := temp$total_deaths[match(agg.deaths.state$date - 1, temp$date)]]
-agg.deaths.state[, total_new_deaths := total_deaths - total_deaths_prev]
 
 temp <- agg.deaths.state
 agg.deaths.state[, total_deaths_prev3 := temp$total_deaths[match(agg.deaths.state$date - 3, temp$date)]]
 agg.deaths.state[, total_deaths_rtgrowth := total_deaths/total_deaths_prev3 - 1]
-agg.deaths.state[, new_deaths_prev3 := temp$total_new_deaths[match(agg.deaths.state$date - 3, temp$date)]]
-agg.deaths.state[, new_deaths_rtgrowth := total_new_deaths/new_deaths_prev3 - 1]
+agg.deaths.state[, new_deaths_prev3 := total_deaths - total_deaths_prev3]
+
+temp <- agg.deaths.state
+agg.deaths.state[, new_deaths_prev3_last := temp$new_deaths_prev3[match(agg.deaths.state$date - 1, temp$date)]]
+agg.deaths.state[, new_deaths_rtgrowth := new_deaths_prev3/new_deaths_prev3_last - 1]
 
 melt.use <- melt(agg.deaths.state[, c("date", "total_deaths_rtgrowth", "new_deaths_rtgrowth")], id.vars = "date")
 melt.use[, variable := ifelse(variable %in% "total_deaths_rtgrowth", "Total Deaths", "New Deaths")]
@@ -499,138 +343,53 @@ agg.deaths.growth.state.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = d
 agg.deaths.growth.state.plot
 ```
 
-## South Carolina
-
-### Confirmed cases
-
-```{r echo = F, message = F, warning = F}
-# adjust state name to flow through rest of code (use capitalized full state name)
+```{r message = F, warning = F}
 use.state <- "South Carolina"
-cases.state <- state.raw[state %in% use.state]
-agg.cases.state <- cases.state[order(date),
-                          .(total_cases = sum(cases, na.rm = T)),
+deaths.state <- state.raw[state %in% use.state]
+agg.deaths.state <- deaths.state[order(date),
+                          .(total_deaths = sum(deaths, na.rm = T)),
                           by = "date"]
-agg.cases.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"], aes(x = date, y = total_cases)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "Total confirmed COVID cases",
-       title = "Total confirmed COVID cases",
-       subtitle = use.state) +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5)) +
-  scale_y_continuous(labels = comma)
-agg.cases.state.plot
-```
 
-```{r echo = F, message = F, warning = F}
-use.state <- "South Carolina"
-cases.state <- state.raw[state %in% use.state]
-agg.cases.state <- cases.state[order(date),
-                          .(total_cases = sum(cases, na.rm = T)),
-                          by = "date"]
-temp <- agg.cases.state
-agg.cases.state[, total_cases_prev := temp$total_cases[match(agg.cases.state$date - 1, temp$date)]]
-agg.cases.state[, total_new_cases := total_cases - total_cases_prev]
-agg.new.cases.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"], aes(x = date, y = total_new_cases)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "Confirmed new COVID cases",
-       title = "Confirmed new COVID cases by day",
-       subtitle = use.state) +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5)) +
-  scale_y_continuous(labels = comma)
-agg.new.cases.state.plot
-```
+temp <- agg.deaths.state
+agg.deaths.state[, total_deaths_prev3 := temp$total_deaths[match(agg.deaths.state$date - 3, temp$date)]]
+agg.deaths.state[, total_deaths_rtgrowth := total_deaths/total_deaths_prev3 - 1]
+agg.deaths.state[, new_deaths_prev3 := total_deaths - total_deaths_prev3]
 
-```{r echo = F, message = F, warning = F}
-cases.state <- state.raw[state %in% use.state]
-agg.cases.state <- cases.state[order(date),
-                          .(total_cases = sum(cases, na.rm = T)),
-                          by = "date"]
-temp <- agg.cases.state
-agg.cases.state[, total_cases_prev := temp$total_cases[match(agg.cases.state$date - 1, temp$date)]]
-agg.cases.state[, total_new_cases := total_cases - total_cases_prev]
+temp <- agg.deaths.state
+agg.deaths.state[, new_deaths_prev3_last := temp$new_deaths_prev3[match(agg.deaths.state$date - 1, temp$date)]]
+agg.deaths.state[, new_deaths_rtgrowth := new_deaths_prev3/new_deaths_prev3_last - 1]
+melt.use <- melt(agg.deaths.state[, c("date", "total_deaths_rtgrowth", "new_deaths_rtgrowth")], id.vars = "date")
+melt.use[, variable := ifelse(variable %in% "total_deaths_rtgrowth", "Total Deaths", "New Deaths")]
 
-temp <- agg.cases.state
-agg.cases.state[, total_cases_prev3 := temp$total_cases[match(agg.cases.state$date - 3, temp$date)]]
-agg.cases.state[, total_cases_rtgrowth := total_cases/total_cases_prev3 - 1]
-agg.cases.state[, new_cases_prev3 := temp$total_new_cases[match(agg.cases.state$date - 3, temp$date)]]
-agg.cases.state[, new_cases_rtgrowth := total_new_cases/new_cases_prev3 - 1]
-
-melt.use <- melt(agg.cases.state[, c("date", "total_cases_rtgrowth", "new_cases_rtgrowth")], id.vars = "date")
-melt.use[, variable := ifelse(variable %in% "total_cases_rtgrowth", "Total Cases", "New Cases")]
-
-agg.cases.growth.state.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = date, y = value, color = variable)) + 
+agg.deaths.growth.state.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = date, y = value, color = variable)) + 
   geom_line(aes(group = variable)) +
     labs(x = "Date",
        y = "Rate of growth (rolling 3-day window)",
-       title = "Rolling 3-day rate of growth: Confirmed COVID cases",
+       title = "Rolling 3-day rate of growth: Confirmed COVID deaths",
        subtitle = use.state,
        color = "Metric") +
   theme(plot.title = element_text(hjust = 0.5),
         plot.subtitle = element_text(hjust = 0.5)) +
   scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = 
                        c(ifelse(min(melt.use$value) > 0, 0, min(melt.use$value)), max(melt.use$value * 1.1)))
-agg.cases.growth.state.plot
-```
-```
-
-### Deaths
-
-```{r echo = F, message = F, warning = F}
-# adjust state name to flow through rest of code (use capitalized full state name)
-use.state <- "South Carolina"
-deaths.state <- state.raw[state %in% use.state]
-agg.deaths.state <- cases.state[order(date),
-                          .(total_deaths = sum(deaths, na.rm = T)),
-                          by = "date"]
-agg.deaths.state.plot <- ggplot(agg.deaths.state[date >= "2020-03-01"], aes(x = date, y = total_deaths)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "Total COVID-related deaths",
-       title = "Total COVID-related deaths",
-       subtitle = use.state) +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5))
-agg.deaths.state.plot
+agg.deaths.growth.state.plot
 ```
 
-```{r echo = F, message = F, warning = F}
-use.state <- "South Carolina"
+```{r message = F, warning = F}
+use.state <- "Tennessee"
 deaths.state <- state.raw[state %in% use.state]
 agg.deaths.state <- deaths.state[order(date),
                           .(total_deaths = sum(deaths, na.rm = T)),
                           by = "date"]
-temp <- agg.deaths.state
-agg.deaths.state[, total_deaths_prev := temp$total_deaths[match(agg.deaths.state$date - 1, temp$date)]]
-agg.deaths.state[, total_new_deaths := total_deaths - total_deaths_prev]
-agg.new.deaths.state.plot <- ggplot(agg.deaths.state[date >= "2020-03-01"], aes(x = date, y = total_new_deaths)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "New COVID-related deaths",
-       title = "New COVID-related deaths by day",
-       subtitle = use.state) +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5))
-agg.new.deaths.state.plot
-```
-
-```{r echo = F, message = F, warning = F}
-use.state <- "South Carolina"
-deaths.state <- state.raw[state %in% use.state]
-agg.deaths.state <- deaths.state[order(date),
-                          .(total_deaths = sum(deaths, na.rm = T)),
-                          by = "date"]
-temp <- agg.deaths.state
-agg.deaths.state[, total_deaths_prev := temp$total_deaths[match(agg.deaths.state$date - 1, temp$date)]]
-agg.deaths.state[, total_new_deaths := total_deaths - total_deaths_prev]
 
 temp <- agg.deaths.state
 agg.deaths.state[, total_deaths_prev3 := temp$total_deaths[match(agg.deaths.state$date - 3, temp$date)]]
 agg.deaths.state[, total_deaths_rtgrowth := total_deaths/total_deaths_prev3 - 1]
-agg.deaths.state[, new_deaths_prev3 := temp$total_new_deaths[match(agg.deaths.state$date - 3, temp$date)]]
-agg.deaths.state[, new_deaths_rtgrowth := total_new_deaths/new_deaths_prev3 - 1]
+agg.deaths.state[, new_deaths_prev3 := total_deaths - total_deaths_prev3]
+
+temp <- agg.deaths.state
+agg.deaths.state[, new_deaths_prev3_last := temp$new_deaths_prev3[match(agg.deaths.state$date - 1, temp$date)]]
+agg.deaths.state[, new_deaths_rtgrowth := new_deaths_prev3/new_deaths_prev3_last - 1]
 
 melt.use <- melt(agg.deaths.state[, c("date", "total_deaths_rtgrowth", "new_deaths_rtgrowth")], id.vars = "date")
 melt.use[, variable := ifelse(variable %in% "total_deaths_rtgrowth", "Total Deaths", "New Deaths")]
@@ -649,581 +408,14 @@ agg.deaths.growth.state.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = d
 agg.deaths.growth.state.plot
 ```
 
-## Tennessee
+## By population rankings
 
-### Confirmed cases
+### States
 
-```{r echo = F, message = F, warning = F}
-# adjust state name to flow through rest of code (use capitalized full state name)
-use.state <- "Tennessee"
-cases.state <- state.raw[state %in% use.state]
-agg.cases.state <- cases.state[order(date),
-                          .(total_cases = sum(cases, na.rm = T)),
-                          by = "date"]
-agg.cases.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"], aes(x = date, y = total_cases)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "Total confirmed COVID cases",
-       title = "Total confirmed COVID cases",
-       subtitle = use.state) +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5)) +
-  scale_y_continuous(labels = comma)
-agg.cases.state.plot
-```
-
-```{r echo = F, message = F, warning = F}
-use.state <- "Tennessee"
-cases.state <- state.raw[state %in% use.state]
-agg.cases.state <- cases.state[order(date),
-                          .(total_cases = sum(cases, na.rm = T)),
-                          by = "date"]
-temp <- agg.cases.state
-agg.cases.state[, total_cases_prev := temp$total_cases[match(agg.cases.state$date - 1, temp$date)]]
-agg.cases.state[, total_new_cases := total_cases - total_cases_prev]
-agg.new.cases.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"], aes(x = date, y = total_new_cases)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "Confirmed new COVID cases",
-       title = "Confirmed new COVID cases by day",
-       subtitle = use.state) +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5)) +
-  scale_y_continuous(labels = comma)
-agg.new.cases.state.plot
-```
-
-```{r echo = F, message = F, warning = F}
-cases.state <- state.raw[state %in% use.state]
-agg.cases.state <- cases.state[order(date),
-                          .(total_cases = sum(cases, na.rm = T)),
-                          by = "date"]
-temp <- agg.cases.state
-agg.cases.state[, total_cases_prev := temp$total_cases[match(agg.cases.state$date - 1, temp$date)]]
-agg.cases.state[, total_new_cases := total_cases - total_cases_prev]
-
-temp <- agg.cases.state
-agg.cases.state[, total_cases_prev3 := temp$total_cases[match(agg.cases.state$date - 3, temp$date)]]
-agg.cases.state[, total_cases_rtgrowth := total_cases/total_cases_prev3 - 1]
-agg.cases.state[, new_cases_prev3 := temp$total_new_cases[match(agg.cases.state$date - 3, temp$date)]]
-agg.cases.state[, new_cases_rtgrowth := total_new_cases/new_cases_prev3 - 1]
-
-melt.use <- melt(agg.cases.state[, c("date", "total_cases_rtgrowth", "new_cases_rtgrowth")], id.vars = "date")
-melt.use[, variable := ifelse(variable %in% "total_cases_rtgrowth", "Total Cases", "New Cases")]
-
-agg.cases.growth.state.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = date, y = value, color = variable)) + 
-  geom_line(aes(group = variable)) +
-    labs(x = "Date",
-       y = "Rate of growth (rolling 3-day window)",
-       title = "Rolling 3-day rate of growth: Confirmed COVID cases",
-       subtitle = use.state,
-       color = "Metric") +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5)) +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = 
-                       c(ifelse(min(melt.use$value) > 0, 0, min(melt.use$value)), max(melt.use$value * 1.1)))
-agg.cases.growth.state.plot
-```
-
-### Deaths
-
-```{r echo = F, message = F, warning = F}
-# adjust state name to flow through rest of code (use capitalized full state name)
-use.state <- "Tennessee"
-deaths.state <- state.raw[state %in% use.state]
-agg.deaths.state <- cases.state[order(date),
-                          .(total_deaths = sum(deaths, na.rm = T)),
-                          by = "date"]
-agg.deaths.state.plot <- ggplot(agg.deaths.state[date >= "2020-03-01"], aes(x = date, y = total_deaths)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "Total COVID-related deaths",
-       title = "Total COVID-related deaths",
-       subtitle = use.state) +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5))
-agg.deaths.state.plot
-```
-
-```{r echo = F, message = F, warning = F}
-use.state <- "Tennessee"
-deaths.state <- state.raw[state %in% use.state]
-agg.deaths.state <- deaths.state[order(date),
-                          .(total_deaths = sum(deaths, na.rm = T)),
-                          by = "date"]
-temp <- agg.deaths.state
-agg.deaths.state[, total_deaths_prev := temp$total_deaths[match(agg.deaths.state$date - 1, temp$date)]]
-agg.deaths.state[, total_new_deaths := total_deaths - total_deaths_prev]
-
-temp <- agg.deaths.state
-agg.deaths.state[, total_deaths_prev3 := temp$total_deaths[match(agg.deaths.state$date - 3, temp$date)]]
-agg.deaths.state[, total_deaths_rtgrowth := total_deaths/total_deaths_prev3 - 1]
-agg.deaths.state[, new_deaths_prev3 := temp$total_new_deaths[match(agg.deaths.state$date - 3, temp$date)]]
-agg.deaths.state[, new_deaths_rtgrowth := total_new_deaths/new_deaths_prev3 - 1]
-
-melt.use <- melt(agg.deaths.state[, c("date", "total_deaths_rtgrowth", "new_deaths_rtgrowth")], id.vars = "date")
-melt.use[, variable := ifelse(variable %in% "total_deaths_rtgrowth", "Total Deaths", "New Deaths")]
-
-agg.deaths.growth.state.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = date, y = value, color = variable)) + 
-  geom_line(aes(group = variable)) +
-    labs(x = "Date",
-       y = "Rate of growth (rolling 3-day window)",
-       title = "Rolling 3-day rate of growth: Confirmed COVID deaths",
-       subtitle = use.state,
-       color = "Metric") +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5)) +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = 
-                       c(ifelse(min(melt.use$value) > 0, 0, min(melt.use$value)), max(melt.use$value * 1.1)))
-agg.deaths.growth.state.plot
-```
-
-## Pierce County, Washington
-
-### Confirmed cases
-
-```{r echo = F, message = F, warning = F}
-# adjust state and county name to flow through rest of code (use capitalized full state name)
-use.state <- "Washington"
-use.county <- "Pierce"
-cases.county <- county.raw[state %in% use.state & county %in% use.county]
-agg.cases.county <- cases.county[order(date),
-                          .(total_cases = sum(cases, na.rm = T)),
-                          by = "date"]
-agg.cases.county.plot <- ggplot(agg.cases.county[date >= "2020-03-01"], aes(x = date, y = total_cases)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "Total confirmed COVID cases",
-       title = "Total confirmed COVID cases",
-       subtitle = paste0(use.county, " County, ", use.state)) +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5)) +
-  scale_y_continuous(labels = comma)
-agg.cases.county.plot
-```
-
-```{r echo = F, message = F, warning = F}
-use.state <- "Washington"
-use.county <- "Pierce"
-cases.county <- county.raw[state %in% use.state & county %in% use.county]
-agg.cases.county <- cases.county[order(date),
-                          .(total_cases = sum(cases, na.rm = T)),
-                          by = "date"]
-temp <- agg.cases.county
-agg.cases.county[, total_cases_prev := temp$total_cases[match(agg.cases.county$date - 1, temp$date)]]
-agg.cases.county[, total_new_cases := total_cases - total_cases_prev]
-agg.new.cases.county.plot <- ggplot(agg.cases.county[date >= "2020-03-01"], aes(x = date, y = total_new_cases)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "Confirmed new COVID cases",
-       title = "Confirmed new COVID cases by day",
-       subtitle = paste0(use.county, " County, ", use.state)) +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5)) +
-  scale_y_continuous(labels = comma)
-agg.new.cases.county.plot
-```
-
-### Deaths
-
-```{r echo = F, message = F, warning = F}
-# adjust state and county name to flow through rest of code (use capitalized full state name)
-use.state <- "Washington"
-use.county <- "Pierce"
-deaths.county <- county.raw[state %in% use.state & county %in% use.county]
-agg.deaths.county <- deaths.county[order(date),
-                          .(total_deaths = sum(deaths, na.rm = T)),
-                          by = "date"]
-agg.deaths.county.plot <- ggplot(agg.deaths.county[date >= "2020-03-01"], aes(x = date, y = total_deaths)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "Total COVID-related deaths",
-       title = "Total COVID-related deaths",
-       subtitle = paste0(use.county, " County, ", use.state)) +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5))
-agg.deaths.county.plot
-```
-
-```{r echo = F, message = F, warning = F}
-use.state <- "Washington"
-use.county <- "Pierce"
-deaths.county <- county.raw[state %in% use.state & county %in% use.county]
-agg.deaths.county <- deaths.county[order(date),
-                          .(total_deaths = sum(deaths, na.rm = T)),
-                          by = "date"]
-temp <- agg.deaths.county
-agg.deaths.county[, total_deaths_prev := temp$total_deaths[match(agg.deaths.county$date - 1, temp$date)]]
-agg.deaths.county[, total_new_deaths := total_deaths - total_deaths_prev]
-agg.new.deaths.county.plot <- ggplot(agg.deaths.county[date >= "2020-03-01"], aes(x = date, y = total_new_deaths)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "New COVID-related deaths",
-       title = "New COVID-related deaths by day",
-       subtitle = paste0(use.county, " County, ", use.state)) +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5))
-agg.new.deaths.county.plot
-```
-
-## Orange County, California
-
-### Confirmed cases
-
-```{r echo = F, message = F, warning = F}
-# adjust state and county name to flow through rest of code (use capitalized full state name)
-use.state <- "California"
-use.county <- "Orange"
-cases.county <- county.raw[state %in% use.state & county %in% use.county]
-agg.cases.county <- cases.county[order(date),
-                          .(total_cases = sum(cases, na.rm = T)),
-                          by = "date"]
-agg.cases.county.plot <- ggplot(agg.cases.county[date >= "2020-03-01"], aes(x = date, y = total_cases)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "Total confirmed COVID cases",
-       title = "Total confirmed COVID cases",
-       subtitle = paste0(use.county, " County, ", use.state)) +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5)) +
-  scale_y_continuous(labels = comma)
-agg.cases.county.plot
-```
-
-```{r echo = F, message = F, warning = F}
-use.state <- "California"
-use.county <- "Orange"
-cases.county <- county.raw[state %in% use.state & county %in% use.county]
-agg.cases.county <- cases.county[order(date),
-                          .(total_cases = sum(cases, na.rm = T)),
-                          by = "date"]
-temp <- agg.cases.county
-agg.cases.county[, total_cases_prev := temp$total_cases[match(agg.cases.county$date - 1, temp$date)]]
-agg.cases.county[, total_new_cases := total_cases - total_cases_prev]
-agg.new.cases.county.plot <- ggplot(agg.cases.county[date >= "2020-03-01"], aes(x = date, y = total_new_cases)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "Confirmed new COVID cases",
-       title = "Confirmed new COVID cases by day",
-       subtitle = paste0(use.county, " County, ", use.state)) +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5)) +
-  scale_y_continuous(labels = comma)
-agg.new.cases.county.plot
-```
-
-### Deaths
-
-```{r echo = F, message = F, warning = F}
-# adjust state and county name to flow through rest of code (use capitalized full state name)
-use.state <- "California"
-use.county <- "Orange"
-deaths.county <- county.raw[state %in% use.state & county %in% use.county]
-agg.deaths.county <- deaths.county[order(date),
-                          .(total_deaths = sum(deaths, na.rm = T)),
-                          by = "date"]
-agg.deaths.county.plot <- ggplot(agg.deaths.county[date >= "2020-03-01"], aes(x = date, y = total_deaths)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "Total COVID-related deaths",
-       title = "Total COVID-related deaths",
-       subtitle = paste0(use.county, " County, ", use.state)) +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5))
-agg.deaths.county.plot
-```
-
-```{r echo = F, message = F, warning = F}
-use.state <- "California"
-use.county <- "Orange"
-deaths.county <- county.raw[state %in% use.state & county %in% use.county]
-agg.deaths.county <- deaths.county[order(date),
-                          .(total_deaths = sum(deaths, na.rm = T)),
-                          by = "date"]
-temp <- agg.deaths.county
-agg.deaths.county[, total_deaths_prev := temp$total_deaths[match(agg.deaths.county$date - 1, temp$date)]]
-agg.deaths.county[, total_new_deaths := total_deaths - total_deaths_prev]
-agg.new.deaths.county.plot <- ggplot(agg.deaths.county[date >= "2020-03-01"], aes(x = date, y = total_new_deaths)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "New COVID-related deaths",
-       title = "New COVID-related deaths by day",
-       subtitle = paste0(use.county, " County, ", use.state)) +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5))
-agg.new.deaths.county.plot
-```
-
-## Richland County, South Carolina
-
-### Confirmed cases
-
-```{r echo = F, message = F, warning = F}
-# adjust state and county name to flow through rest of code (use capitalized full state name)
-use.state <- "South Carolina"
-use.county <- "Richland"
-cases.county <- county.raw[state %in% use.state & county %in% use.county]
-agg.cases.county <- cases.county[order(date),
-                          .(total_cases = sum(cases, na.rm = T)),
-                          by = "date"]
-agg.cases.county.plot <- ggplot(agg.cases.county[date >= "2020-03-01"], aes(x = date, y = total_cases)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "Total confirmed COVID cases",
-       title = "Total confirmed COVID cases",
-       subtitle = paste0(use.county, " County, ", use.state)) +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5)) +
-  scale_y_continuous(labels = comma)
-agg.cases.county.plot
-```
-
-```{r echo = F, message = F, warning = F}
-use.state <- "South Carolina"
-use.county <- "Richland"
-cases.county <- county.raw[state %in% use.state & county %in% use.county]
-agg.cases.county <- cases.county[order(date),
-                          .(total_cases = sum(cases, na.rm = T)),
-                          by = "date"]
-temp <- agg.cases.county
-agg.cases.county[, total_cases_prev := temp$total_cases[match(agg.cases.county$date - 1, temp$date)]]
-agg.cases.county[, total_new_cases := total_cases - total_cases_prev]
-agg.new.cases.county.plot <- ggplot(agg.cases.county[date >= "2020-03-01"], aes(x = date, y = total_new_cases)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "Confirmed new COVID cases",
-       title = "Confirmed new COVID cases by day",
-       subtitle = paste0(use.county, " County, ", use.state)) +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5)) +
-  scale_y_continuous(labels = comma)
-agg.new.cases.county.plot
-```
-
-### Deaths
-
-```{r echo = F, message = F, warning = F}
-# adjust state and county name to flow through rest of code (use capitalized full state name)
-use.state <- "South Carolina"
-use.county <- "Richland"
-deaths.county <- county.raw[state %in% use.state & county %in% use.county]
-agg.deaths.county <- deaths.county[order(date),
-                          .(total_deaths = sum(deaths, na.rm = T)),
-                          by = "date"]
-agg.deaths.county.plot <- ggplot(agg.deaths.county[date >= "2020-03-01"], aes(x = date, y = total_deaths)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "Total COVID-related deaths",
-       title = "Total COVID-related deaths",
-       subtitle = paste0(use.county, " County, ", use.state)) +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5))
-agg.deaths.county.plot
-```
-
-```{r echo = F, message = F, warning = F}
-use.state <- "South Carolina"
-use.county <- "Richland"
-deaths.county <- county.raw[state %in% use.state & county %in% use.county]
-agg.deaths.county <- deaths.county[order(date),
-                          .(total_deaths = sum(deaths, na.rm = T)),
-                          by = "date"]
-temp <- agg.deaths.county
-agg.deaths.county[, total_deaths_prev := temp$total_deaths[match(agg.deaths.county$date - 1, temp$date)]]
-agg.deaths.county[, total_new_deaths := total_deaths - total_deaths_prev]
-agg.new.deaths.county.plot <- ggplot(agg.deaths.county[date >= "2020-03-01"], aes(x = date, y = total_new_deaths)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "New COVID-related deaths",
-       title = "New COVID-related deaths by day",
-       subtitle = paste0(use.county, " County, ", use.state)) +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5))
-agg.new.deaths.county.plot
-```
-
-## York County, South Carolina
-
-### Confirmed cases
-
-```{r echo = F, message = F, warning = F}
-# adjust state and county name to flow through rest of code (use capitalized full state name)
-use.state <- "South Carolina"
-use.county <- "York"
-cases.county <- county.raw[state %in% use.state & county %in% use.county]
-agg.cases.county <- cases.county[order(date),
-                          .(total_cases = sum(cases, na.rm = T)),
-                          by = "date"]
-agg.cases.county.plot <- ggplot(agg.cases.county[date >= "2020-03-01"], aes(x = date, y = total_cases)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "Total confirmed COVID cases",
-       title = "Total confirmed COVID cases",
-       subtitle = paste0(use.county, " County, ", use.state)) +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5)) +
-  scale_y_continuous(labels = comma)
-agg.cases.county.plot
-```
-
-```{r  echo = F, message = F, warning = F}
-use.state <- "South Carolina"
-use.county <- "York"
-cases.county <- county.raw[state %in% use.state & county %in% use.county]
-agg.cases.county <- cases.county[order(date),
-                          .(total_cases = sum(cases, na.rm = T)),
-                          by = "date"]
-temp <- agg.cases.county
-agg.cases.county[, total_cases_prev := temp$total_cases[match(agg.cases.county$date - 1, temp$date)]]
-agg.cases.county[, total_new_cases := total_cases - total_cases_prev]
-agg.new.cases.county.plot <- ggplot(agg.cases.county[date >= "2020-03-01"], aes(x = date, y = total_new_cases)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "Confirmed new COVID cases",
-       title = "Confirmed new COVID cases by day",
-       subtitle = paste0(use.county, " County, ", use.state)) +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5)) +
-  scale_y_continuous(labels = comma)
-agg.new.cases.county.plot
-```
-
-### Deaths
-
-```{r echo = F, message = F, warning = F}
-# adjust state and county name to flow through rest of code (use capitalized full state name)
-use.state <- "South Carolina"
-use.county <- "York"
-deaths.county <- county.raw[state %in% use.state & county %in% use.county]
-agg.deaths.county <- deaths.county[order(date),
-                          .(total_deaths = sum(deaths, na.rm = T)),
-                          by = "date"]
-agg.deaths.county.plot <- ggplot(agg.deaths.county[date >= "2020-03-01"], aes(x = date, y = total_deaths)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "Total COVID-related deaths",
-       title = "Total COVID-related deaths",
-       subtitle = paste0(use.county, " County, ", use.state)) +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5))
-agg.deaths.county.plot
-```
-
-```{r echo = F, message = F, warning = F}
-use.state <- "South Carolina"
-use.county <- "York"
-deaths.county <- county.raw[state %in% use.state & county %in% use.county]
-agg.deaths.county <- deaths.county[order(date),
-                          .(total_deaths = sum(deaths, na.rm = T)),
-                          by = "date"]
-temp <- agg.deaths.county
-agg.deaths.county[, total_deaths_prev := temp$total_deaths[match(agg.deaths.county$date - 1, temp$date)]]
-agg.deaths.county[, total_new_deaths := total_deaths - total_deaths_prev]
-agg.new.deaths.county.plot <- ggplot(agg.deaths.county[date >= "2020-03-01"], aes(x = date, y = total_new_deaths)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "New COVID-related deaths",
-       title = "New COVID-related deaths by day",
-       subtitle = paste0(use.county, " County, ", use.state)) +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5))
-agg.new.deaths.county.plot
-```
-
-## Davidson County, Tennessee
-
-### Confirmed cases
-
-```{r echo = F, message = F, warning = F}
-# adjust state and county name to flow through rest of code (use capitalized full state name)
-use.state <- "Tennessee"
-use.county <- "Davidson"
-cases.county <- county.raw[state %in% use.state & county %in% use.county]
-agg.cases.county <- cases.county[order(date),
-                          .(total_cases = sum(cases, na.rm = T)),
-                          by = "date"]
-agg.cases.county.plot <- ggplot(agg.cases.county[date >= "2020-03-01"], aes(x = date, y = total_cases)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "Total confirmed COVID cases",
-       title = "Total confirmed COVID cases",
-       subtitle = paste0(use.county, " County, ", use.state)) +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5)) +
-  scale_y_continuous(labels = comma)
-agg.cases.county.plot
-```
-
-```{r echo = F, message = F, warning = F}
-use.state <- "Tennessee"
-use.county <- "Davidson"
-cases.county <- county.raw[state %in% use.state & county %in% use.county]
-agg.cases.county <- cases.county[order(date),
-                          .(total_cases = sum(cases, na.rm = T)),
-                          by = "date"]
-temp <- agg.cases.county
-agg.cases.county[, total_cases_prev := temp$total_cases[match(agg.cases.county$date - 1, temp$date)]]
-agg.cases.county[, total_new_cases := total_cases - total_cases_prev]
-agg.new.cases.county.plot <- ggplot(agg.cases.county[date >= "2020-03-01"], aes(x = date, y = total_new_cases)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "Confirmed new COVID cases",
-       title = "Confirmed new COVID cases by day",
-       subtitle = paste0(use.county, " County, ", use.state)) +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5)) +
-  scale_y_continuous(labels = comma)
-agg.new.cases.county.plot
-```
-
-### Deaths
-
-```{r echo = F, message = F, warning = F}
-# adjust state and county name to flow through rest of code (use capitalized full state name)
-use.state <- "Tennessee"
-use.county <- "Davidson"
-deaths.county <- county.raw[state %in% use.state & county %in% use.county]
-agg.deaths.county <- deaths.county[order(date),
-                          .(total_deaths = sum(deaths, na.rm = T)),
-                          by = "date"]
-agg.deaths.county.plot <- ggplot(agg.deaths.county[date >= "2020-03-01"], aes(x = date, y = total_deaths)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "Total COVID-related deaths",
-       title = "Total COVID-related deaths",
-       subtitle = paste0(use.county, " County, ", use.state)) +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5))
-agg.deaths.county.plot
-```
-
-```{r echo = F, message = F, warning = F}
-use.state <- "Tennessee"
-use.county <- "Davidson"
-deaths.county <- county.raw[state %in% use.state & county %in% use.county]
-agg.deaths.county <- deaths.county[order(date),
-                          .(total_deaths = sum(deaths, na.rm = T)),
-                          by = "date"]
-temp <- agg.deaths.county
-agg.deaths.county[, total_deaths_prev := temp$total_deaths[match(agg.deaths.county$date - 1, temp$date)]]
-agg.deaths.county[, total_new_deaths := total_deaths - total_deaths_prev]
-agg.new.deaths.county.plot <- ggplot(agg.deaths.county[date >= "2020-03-01"], aes(x = date, y = total_new_deaths)) + 
-  geom_bar(stat = "identity") +
-    labs(x = "Date",
-       y = "New COVID-related deaths",
-       title = "New COVID-related deaths by day",
-       subtitle = paste0(use.county, " County, ", use.state)) +
-  theme(plot.title = element_text(hjust = 0.5),
-        plot.subtitle = element_text(hjust = 0.5))
-agg.new.deaths.county.plot
-```
-
-## Compare state data based on population
-
-### Total confirmed cases
+#### Total confirmed cases
 
 Table of total confirmed cases per million residents (all 50 states)
-```{r echo = F, message = F, warning = F}
+```{r message = F, warning = F}
 state.per.cap <- merge(state.raw, stay_dates, by = "state", all.x = T)
 state.per.cap[, casesPerMillion := as.integer(cases/population * 1000000)]
 date.cut <- max(state.per.cap$date)
@@ -1233,7 +425,7 @@ state.per.cap.agg[, casesPerMillion := comma(casesPerMillion)]
 state.per.cap.agg
 ```
 
-```{r echo = F, message = F, warning = F}
+```{r message = F, warning = F}
 state.per.cap.agg[, row := .I]
 top.ten <- state.per.cap.agg[row < 11, "state"]
 state.per.cap.series <- state.per.cap[state %in% top.ten$state]
@@ -1249,10 +441,10 @@ state.per.cap.plot <- ggplot(state.per.cap.series[date >= "2020-03-01"], aes(x =
 state.per.cap.plot
 ```
 
-### New confirmed cases
+#### New confirmed cases
 
-Table of new cases per million residents: rolling 3-day average (all 50 states)
-```{r echo = F, message = F, warning = F}
+Table of new cases per million residents: rolling 3-day total (all 50 states)
+```{r message = F, warning = F}
 state.per.cap <- merge(state.raw, stay_dates, by = "state", all.x = T)
 date.cut <- max(state.per.cap$date)
 date.min <- max(state.per.cap$date) - 3
@@ -1280,7 +472,7 @@ state.per.cap.plot <- ggplot(state.per.cap.series[date >= "2020-03-10"], aes(x =
   geom_line(aes(group = state)) +
     labs(x = "Date",
        y = "New confirmed COVID cases per million residents",
-       title = "New confirmed COVID cases per million resident (3-day rolling average)",
+       title = "New confirmed COVID cases per million resident (3-day rolling total)",
        subtitle = paste0("States with 10 highest counts as of ", format(date.cut, "%B %d, %Y"))) +
   theme(plot.title = element_text(hjust = 0.5),
         plot.subtitle = element_text(hjust = 0.5)) +
@@ -1288,10 +480,10 @@ state.per.cap.plot <- ggplot(state.per.cap.series[date >= "2020-03-10"], aes(x =
 state.per.cap.plot
 ```
 
-### Total deaths
+#### Total deaths
 
 Table of total deaths per million residents (all 50 states)
-```{r echo = F, message = F, warning = F}
+```{r message = F, warning = F}
 state.per.cap <- merge(state.raw, stay_dates, by = "state", all.x = T)
 state.per.cap[, deathsPerMillion := as.integer(deaths/population * 1000000)]
 date.cut <- max(state.per.cap$date)
@@ -1301,7 +493,7 @@ state.per.cap.agg[, deathsPerMillion := comma(deathsPerMillion)]
 state.per.cap.agg
 ```
 
-```{r echo = F, message = F, warning = F}
+```{r message = F, warning = F}
 state.per.cap.agg[, row := .I]
 top.ten <- state.per.cap.agg[row < 11, "state"]
 state.per.cap.series <- state.per.cap[state %in% top.ten$state]
@@ -1317,10 +509,10 @@ state.per.cap.plot <- ggplot(state.per.cap.series[date >= "2020-03-01"], aes(x =
 state.per.cap.plot
 ```
 
-### New deaths
+#### New deaths
 
-Table of new deaths per million residents: rolling 3-day average (all 50 states)
-```{r echo = F, message = F, warning = F}
+Table of new deaths per million residents: rolling 3-day total (all 50 states)
+```{r message = F, warning = F}
 state.per.cap <- merge(state.raw, stay_dates, by = "state", all.x = T)
 date.cut <- max(state.per.cap$date)
 date.min <- max(state.per.cap$date) - 3
@@ -1334,7 +526,7 @@ state.per.cap.agg[, deathsNewPerMillion := comma(deathsNewPerMillion)]
 state.per.cap.agg
 ```
 
-```{r echo = F, message = F, warning = F}
+```{r message = F, warning = F}
 state.per.cap.agg[, row := .I]
 top.ten <- state.per.cap.agg[row < 11, "state"]
 state.per.cap.series <- state.per.cap[state %in% top.ten$state]
@@ -1348,14 +540,969 @@ state.per.cap.plot <- ggplot(state.per.cap.series[date >= "2020-03-10"], aes(x =
   geom_line(aes(group = state)) +
     labs(x = "Date",
        y = "New COVID-related deaths per million residents",
-       title = "New COVID-related deaths per million resident (3-day rolling average)",
+       title = "New COVID-related deaths per million resident (3-day rolling total)",
        subtitle = paste0("States with 10 highest counts as of ", format(date.cut, "%B %d, %Y"))) +
   theme(plot.title = element_text(hjust = 0.5),
         plot.subtitle = element_text(hjust = 0.5))
 state.per.cap.plot
 ```
 
-## Compare new cases based on stay-at-home orders
+### Counties
+
+#### Confirmed cases
+
+Table showing total cases per million and percentile for all US counties
+Includes our counties and the top 5 in the US for perspective
+```{r  echo = F, message = F, warning = F}
+# merge county raw and county pop
+county.per.cap <- merge(county.raw, county_pop, all.x = T, by.x = c("county", "state"), by.y = c("CTYNAME", "STNAME"))
+county.per.cap[, casesPerMillion := round(cases/POPESTIMATE2019 * 1000000, 2)]
+date.cut <- max(county.per.cap$date)
+county.per.cap <- county.per.cap[date == date.cut]
+county.per.cap <- county.per.cap[order(-casesPerMillion), c("county", "state", "casesPerMillion")]
+county.per.cap[, rawRanking := .I]
+county.per.cap[, percentile := floor((3142 - rawRanking)/31.42)]
+county.per.cap[, casesPerMillion := comma(casesPerMillion)]
+county.per.cap[, flgOurCounty := ifelse(county %in% "Pierce" & state %in% "Washington", 1,
+                                       ifelse(county %in% "Orange" & state %in% "California", 1,
+                                              ifelse(county %in% c("Richland", "York") & state %in% "South Carolina", 1,
+                                                     ifelse(county %in% "Davidson" & state %in% "Tennessee", 1, 0))))]
+county.per.cap[flgOurCounty == 1 | rawRanking < 6, -c("flgOurCounty")]
+```
+
+Our county percentiles over time
+```{r  echo = F, message = F, warning = F}
+county.per.cap <- merge(county.raw, county_pop, all.x = T, by.x = c("county", "state"), by.y = c("CTYNAME", "STNAME"))
+county.per.cap[, casesPerMillion := round(cases/POPESTIMATE2019 * 1000000, 2)]
+county.per.cap <- county.per.cap[order(fips, date),
+                                 .(casesPerMillion = max(casesPerMillion)),
+                                 by = c("fips", "date")]
+
+county.per.cap <- county.per.cap[!is.na(casesPerMillion) & as.Date(date) >= "2020-03-16"]
+county.per.cap.casted <- dcast.data.table(county.per.cap, factor(fips) ~ factor(date), value.var = "casesPerMillion", fun.aggregate = sum)
+for(i in seq.Date(as.Date("2020-03-16"), max(as.Date(county.raw$date)), by = "day")) {
+ # i <- "2020-04-07" 
+  i <- format(as.Date(i, origin = "1970-01-01"), "%Y-%m-%d")
+    colnames <- c("fips", as.character(i))
+    temp <- county.per.cap.casted[, ..colnames]
+    setnames(temp, as.character(i), "casesPerMillion")
+    temp <- temp[order(-casesPerMillion)]
+    temp[, rawRanking := .I]
+    temp[, paste0("percentile_", as.character(i)) := floor((3142 - rawRanking)/31.42)]
+    county.per.cap.casted <- merge(county.per.cap.casted, temp[, c(1,4)], all.x = T, by = "fips")
+}
+
+setnames(county.per.cap.casted, "fips", "percentile_fips")
+county.per.cap.casted <- county.per.cap.casted[, .SD, .SDcols = patterns("^percentile")]
+county.per.cap.melt <- melt(county.per.cap.casted, id.var = "percentile_fips")
+county.per.cap.melt[, variable := gsub("percentile_(.*)", "\\1", variable)]
+our.fips <- c(6059, 47037, 53053, 45091, 45079)
+county.per.cap.melt <- county.per.cap.melt[percentile_fips %in% our.fips]
+
+county.per.cap.melt[, county := county.raw$county[match(county.per.cap.melt$percentile_fips, county.raw$fips)]]
+
+plot.county.per.cap <- ggplot(county.per.cap.melt, aes(x = as.Date(variable), y = value, color = county)) +
+  geom_line(aes(group = county)) +
+    labs(x = "Date",
+       y = "Percentile of US counties",
+       title = "Our county percentiles for total COVID cases",
+       subtitle = "Percentiles based on total cases per million residents",
+       color = "County") +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+plot.county.per.cap
+```
+
+#### Deaths
+
+Table showing total deaths per million and percentile for all US counties
+Includes our counties and the top 5 in the US for perspective
+```{r  echo = F, message = F, warning = F}
+county.per.cap <- merge(county.raw, county_pop, all.x = T, by.x = c("county", "state"), by.y = c("CTYNAME", "STNAME"))
+county.per.cap[, deathsPerMillion := round(deaths/POPESTIMATE2019 * 1000000, 2)]
+date.cut <- max(county.per.cap$date)
+county.per.cap <- county.per.cap[date == date.cut]
+county.per.cap <- county.per.cap[order(-deathsPerMillion), c("county", "state", "deathsPerMillion")]
+county.per.cap[, rawRanking := .I]
+county.per.cap[, percentile := floor((3142 - rawRanking)/31.42)]
+county.per.cap[, deathsPerMillion := comma(deathsPerMillion)]
+county.per.cap[, flgOurCounty := ifelse(county %in% "Pierce" & state %in% "Washington", 1,
+                                       ifelse(county %in% "Orange" & state %in% "California", 1,
+                                              ifelse(county %in% c("Richland", "York") & state %in% "South Carolina", 1,
+                                                     ifelse(county %in% "Davidson" & state %in% "Tennessee", 1, 0))))]
+county.per.cap[flgOurCounty == 1 | rawRanking < 6, -c("flgOurCounty")]
+```
+
+Our county percentiles over time
+```{r  echo = F, message = F, warning = F}
+county.per.cap <- merge(county.raw, county_pop, all.x = T, by.x = c("county", "state"), by.y = c("CTYNAME", "STNAME"))
+county.per.cap[, deathsPerMillion := round(deaths/POPESTIMATE2019 * 1000000, 2)]
+county.per.cap <- county.per.cap[order(fips, date),
+                                 .(deathsPerMillion = max(deathsPerMillion)),
+                                 by = c("fips", "date")]
+
+county.per.cap <- county.per.cap[!is.na(deathsPerMillion) & as.Date(date) >= "2020-03-16"]
+county.per.cap.casted <- dcast.data.table(county.per.cap, factor(fips) ~ factor(date), value.var = "deathsPerMillion", fun.aggregate = sum)
+for(i in seq.Date(as.Date("2020-03-16"), max(as.Date(county.raw$date)), by = "day")) {
+ # i <- "2020-04-07" 
+  i <- format(as.Date(i, origin = "1970-01-01"), "%Y-%m-%d")
+    colnames <- c("fips", as.character(i))
+    temp <- county.per.cap.casted[, ..colnames]
+    setnames(temp, as.character(i), "deathsPerMillion")
+    temp <- temp[order(-deathsPerMillion)]
+    temp[, rawRanking := .I]
+    temp[, paste0("percentile_", as.character(i)) := floor((3142 - rawRanking)/31.42)]
+    county.per.cap.casted <- merge(county.per.cap.casted, temp[, c(1,4)], all.x = T, by = "fips")
+}
+
+setnames(county.per.cap.casted, "fips", "percentile_fips")
+county.per.cap.casted <- county.per.cap.casted[, .SD, .SDcols = patterns("^percentile")]
+county.per.cap.melt <- melt(county.per.cap.casted, id.var = "percentile_fips")
+county.per.cap.melt[, variable := gsub("percentile_(.*)", "\\1", variable)]
+our.fips <- c(6059, 47037, 53053, 45091, 45079)
+county.per.cap.melt <- county.per.cap.melt[percentile_fips %in% our.fips]
+
+county.per.cap.melt[, county := county.raw$county[match(county.per.cap.melt$percentile_fips, county.raw$fips)]]
+
+plot.county.per.cap <- ggplot(county.per.cap.melt, aes(x = as.Date(variable), y = value, color = county)) +
+  geom_line(aes(group = county)) +
+    labs(x = "Date",
+       y = "Percentile of US counties",
+       title = "Our county percentiles for total COVID deaths",
+       subtitle = "Percentiles based on total deaths per million residents",
+       color = "County") +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+plot.county.per.cap
+```
+
+## Raw counts
+
+### Total confirmed cases
+
+#### U.S.
+
+```{r message = F, warning = F}
+agg.cases.US <- state.raw[order(date),
+                          .(total_cases = sum(cases, na.rm = T)),
+                          by = "date"]
+agg.cases.US.plot <- ggplot(agg.cases.US[date >= "2020-03-01"], aes(x = date, y = total_cases)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "Total confirmed COVID cases",
+       title = "Total confirmed COVID cases",
+       subtitle = "United States") +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_y_continuous(labels = comma)
+agg.cases.US.plot
+```
+
+#### Our states
+
+```{r message = F, warning = F}
+# adjust state name to flow through rest of code (use capitalized full state name)
+use.state <- "Washington"
+cases.state <- state.raw[state %in% use.state]
+agg.cases.state <- cases.state[order(date),
+                          .(total_cases = sum(cases, na.rm = T)),
+                          by = "date"]
+agg.cases.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"], aes(x = date, y = total_cases)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "Total confirmed COVID cases",
+       title = "Total confirmed COVID cases",
+       subtitle = use.state) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_y_continuous(labels = comma)
+agg.cases.state.plot
+```
+
+```{r message = F, warning = F}
+# adjust state name to flow through rest of code (use capitalized full state name)
+use.state <- "California"
+cases.state <- state.raw[state %in% use.state]
+agg.cases.state <- cases.state[order(date),
+                          .(total_cases = sum(cases, na.rm = T)),
+                          by = "date"]
+agg.cases.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"], aes(x = date, y = total_cases)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "Total confirmed COVID cases",
+       title = "Total confirmed COVID cases",
+       subtitle = use.state) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_y_continuous(labels = comma)
+agg.cases.state.plot
+```
+
+```{r message = F, warning = F}
+# adjust state name to flow through rest of code (use capitalized full state name)
+use.state <- "South Carolina"
+cases.state <- state.raw[state %in% use.state]
+agg.cases.state <- cases.state[order(date),
+                          .(total_cases = sum(cases, na.rm = T)),
+                          by = "date"]
+agg.cases.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"], aes(x = date, y = total_cases)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "Total confirmed COVID cases",
+       title = "Total confirmed COVID cases",
+       subtitle = use.state) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_y_continuous(labels = comma)
+agg.cases.state.plot
+```
+
+```{r message = F, warning = F}
+# adjust state name to flow through rest of code (use capitalized full state name)
+use.state <- "Tennessee"
+cases.state <- state.raw[state %in% use.state]
+agg.cases.state <- cases.state[order(date),
+                          .(total_cases = sum(cases, na.rm = T)),
+                          by = "date"]
+agg.cases.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"], aes(x = date, y = total_cases)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "Total confirmed COVID cases",
+       title = "Total confirmed COVID cases",
+       subtitle = use.state) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_y_continuous(labels = comma)
+agg.cases.state.plot
+```
+
+#### Our counties
+
+```{r message = F, warning = F}
+# adjust state and county name to flow through rest of code (use capitalized full state name)
+use.state <- "Washington"
+use.county <- "Pierce"
+cases.county <- county.raw[state %in% use.state & county %in% use.county]
+agg.cases.county <- cases.county[order(date),
+                          .(total_cases = sum(cases, na.rm = T)),
+                          by = "date"]
+agg.cases.county.plot <- ggplot(agg.cases.county[date >= "2020-03-01"], aes(x = date, y = total_cases)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "Total confirmed COVID cases",
+       title = "Total confirmed COVID cases",
+       subtitle = paste0(use.county, " County, ", use.state)) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_y_continuous(labels = comma)
+agg.cases.county.plot
+```
+
+```{r message = F, warning = F}
+# adjust state and county name to flow through rest of code (use capitalized full state name)
+use.state <- "California"
+use.county <- "Orange"
+cases.county <- county.raw[state %in% use.state & county %in% use.county]
+agg.cases.county <- cases.county[order(date),
+                          .(total_cases = sum(cases, na.rm = T)),
+                          by = "date"]
+agg.cases.county.plot <- ggplot(agg.cases.county[date >= "2020-03-01"], aes(x = date, y = total_cases)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "Total confirmed COVID cases",
+       title = "Total confirmed COVID cases",
+       subtitle = paste0(use.county, " County, ", use.state)) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_y_continuous(labels = comma)
+agg.cases.county.plot
+```
+
+```{r message = F, warning = F}
+# adjust state and county name to flow through rest of code (use capitalized full state name)
+use.state <- "South Carolina"
+use.county <- "Richland"
+cases.county <- county.raw[state %in% use.state & county %in% use.county]
+agg.cases.county <- cases.county[order(date),
+                          .(total_cases = sum(cases, na.rm = T)),
+                          by = "date"]
+agg.cases.county.plot <- ggplot(agg.cases.county[date >= "2020-03-01"], aes(x = date, y = total_cases)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "Total confirmed COVID cases",
+       title = "Total confirmed COVID cases",
+       subtitle = paste0(use.county, " County, ", use.state)) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_y_continuous(labels = comma)
+agg.cases.county.plot
+```
+
+```{r message = F, warning = F}
+# adjust state and county name to flow through rest of code (use capitalized full state name)
+use.state <- "South Carolina"
+use.county <- "York"
+cases.county <- county.raw[state %in% use.state & county %in% use.county]
+agg.cases.county <- cases.county[order(date),
+                          .(total_cases = sum(cases, na.rm = T)),
+                          by = "date"]
+agg.cases.county.plot <- ggplot(agg.cases.county[date >= "2020-03-01"], aes(x = date, y = total_cases)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "Total confirmed COVID cases",
+       title = "Total confirmed COVID cases",
+       subtitle = paste0(use.county, " County, ", use.state)) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_y_continuous(labels = comma)
+agg.cases.county.plot
+```
+
+```{r message = F, warning = F}
+# adjust state and county name to flow through rest of code (use capitalized full state name)
+use.state <- "Tennessee"
+use.county <- "Davidson"
+cases.county <- county.raw[state %in% use.state & county %in% use.county]
+agg.cases.county <- cases.county[order(date),
+                          .(total_cases = sum(cases, na.rm = T)),
+                          by = "date"]
+agg.cases.county.plot <- ggplot(agg.cases.county[date >= "2020-03-01"], aes(x = date, y = total_cases)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "Total confirmed COVID cases",
+       title = "Total confirmed COVID cases",
+       subtitle = paste0(use.county, " County, ", use.state)) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_y_continuous(labels = comma)
+agg.cases.county.plot
+```
+
+### New confirmed cases
+
+#### U.S.
+
+```{r message = F, warning = F}
+agg.cases.US <- state.raw[order(date),
+                          .(total_cases = sum(cases, na.rm = T)),
+                          by = "date"]
+temp <- agg.cases.US
+agg.cases.US[, total_cases_prev := temp$total_cases[match(agg.cases.US$date - 1, temp$date)]]
+agg.cases.US[, total_new_cases := total_cases - total_cases_prev]
+agg.new.cases.US.plot <- ggplot(agg.cases.US[date >= "2020-03-01"], aes(x = date, y = total_new_cases)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "Confirmed new COVID cases",
+       title = "Confirmed new COVID cases by day",
+       subtitle = "United States") +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_y_continuous(labels = comma)
+agg.new.cases.US.plot
+```
+
+#### Our states
+
+```{r message = F, warning = F}
+use.state <- "Washington"
+cases.state <- state.raw[state %in% use.state]
+agg.cases.state <- cases.state[order(date),
+                          .(total_cases = sum(cases, na.rm = T)),
+                          by = "date"]
+temp <- agg.cases.state
+agg.cases.state[, total_cases_prev := temp$total_cases[match(agg.cases.state$date - 1, temp$date)]]
+agg.cases.state[, total_new_cases := total_cases - total_cases_prev]
+agg.new.cases.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"], aes(x = date, y = total_new_cases)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "Confirmed new COVID cases",
+       title = "Confirmed new COVID cases by day",
+       subtitle = use.state) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_y_continuous(labels = comma)
+agg.new.cases.state.plot
+```
+
+```{r message = F, warning = F}
+use.state <- "California"
+cases.state <- state.raw[state %in% use.state]
+agg.cases.state <- cases.state[order(date),
+                          .(total_cases = sum(cases, na.rm = T)),
+                          by = "date"]
+temp <- agg.cases.state
+agg.cases.state[, total_cases_prev := temp$total_cases[match(agg.cases.state$date - 1, temp$date)]]
+agg.cases.state[, total_new_cases := total_cases - total_cases_prev]
+agg.new.cases.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"], aes(x = date, y = total_new_cases)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "Confirmed new COVID cases",
+       title = "Confirmed new COVID cases by day",
+       subtitle = use.state) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_y_continuous(labels = comma)
+agg.new.cases.state.plot
+```
+
+```{r message = F, warning = F}
+use.state <- "South Carolina"
+cases.state <- state.raw[state %in% use.state]
+agg.cases.state <- cases.state[order(date),
+                          .(total_cases = sum(cases, na.rm = T)),
+                          by = "date"]
+temp <- agg.cases.state
+agg.cases.state[, total_cases_prev := temp$total_cases[match(agg.cases.state$date - 1, temp$date)]]
+agg.cases.state[, total_new_cases := total_cases - total_cases_prev]
+agg.new.cases.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"], aes(x = date, y = total_new_cases)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "Confirmed new COVID cases",
+       title = "Confirmed new COVID cases by day",
+       subtitle = use.state) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_y_continuous(labels = comma)
+agg.new.cases.state.plot
+```
+
+```{r message = F, warning = F}
+use.state <- "Tennessee"
+cases.state <- state.raw[state %in% use.state]
+agg.cases.state <- cases.state[order(date),
+                          .(total_cases = sum(cases, na.rm = T)),
+                          by = "date"]
+temp <- agg.cases.state
+agg.cases.state[, total_cases_prev := temp$total_cases[match(agg.cases.state$date - 1, temp$date)]]
+agg.cases.state[, total_new_cases := total_cases - total_cases_prev]
+agg.new.cases.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"], aes(x = date, y = total_new_cases)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "Confirmed new COVID cases",
+       title = "Confirmed new COVID cases by day",
+       subtitle = use.state) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_y_continuous(labels = comma)
+agg.new.cases.state.plot
+```
+
+#### Our counties
+
+```{r message = F, warning = F}
+use.state <- "Washington"
+use.county <- "Pierce"
+cases.county <- county.raw[state %in% use.state & county %in% use.county]
+agg.cases.county <- cases.county[order(date),
+                          .(total_cases = sum(cases, na.rm = T)),
+                          by = "date"]
+temp <- agg.cases.county
+agg.cases.county[, total_cases_prev := temp$total_cases[match(agg.cases.county$date - 1, temp$date)]]
+agg.cases.county[, total_new_cases := total_cases - total_cases_prev]
+agg.new.cases.county.plot <- ggplot(agg.cases.county[date >= "2020-03-01"], aes(x = date, y = total_new_cases)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "Confirmed new COVID cases",
+       title = "Confirmed new COVID cases by day",
+       subtitle = paste0(use.county, " County, ", use.state)) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_y_continuous(labels = comma)
+agg.new.cases.county.plot
+```
+
+```{r message = F, warning = F}
+use.state <- "California"
+use.county <- "Orange"
+cases.county <- county.raw[state %in% use.state & county %in% use.county]
+agg.cases.county <- cases.county[order(date),
+                          .(total_cases = sum(cases, na.rm = T)),
+                          by = "date"]
+temp <- agg.cases.county
+agg.cases.county[, total_cases_prev := temp$total_cases[match(agg.cases.county$date - 1, temp$date)]]
+agg.cases.county[, total_new_cases := total_cases - total_cases_prev]
+agg.new.cases.county.plot <- ggplot(agg.cases.county[date >= "2020-03-01"], aes(x = date, y = total_new_cases)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "Confirmed new COVID cases",
+       title = "Confirmed new COVID cases by day",
+       subtitle = paste0(use.county, " County, ", use.state)) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_y_continuous(labels = comma)
+agg.new.cases.county.plot
+```
+
+```{r message = F, warning = F}
+use.state <- "South Carolina"
+use.county <- "Richland"
+cases.county <- county.raw[state %in% use.state & county %in% use.county]
+agg.cases.county <- cases.county[order(date),
+                          .(total_cases = sum(cases, na.rm = T)),
+                          by = "date"]
+temp <- agg.cases.county
+agg.cases.county[, total_cases_prev := temp$total_cases[match(agg.cases.county$date - 1, temp$date)]]
+agg.cases.county[, total_new_cases := total_cases - total_cases_prev]
+agg.new.cases.county.plot <- ggplot(agg.cases.county[date >= "2020-03-01"], aes(x = date, y = total_new_cases)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "Confirmed new COVID cases",
+       title = "Confirmed new COVID cases by day",
+       subtitle = paste0(use.county, " County, ", use.state)) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_y_continuous(labels = comma)
+agg.new.cases.county.plot
+```
+
+```{r  echo = F, message = F, warning = F}
+use.state <- "South Carolina"
+use.county <- "York"
+cases.county <- county.raw[state %in% use.state & county %in% use.county]
+agg.cases.county <- cases.county[order(date),
+                          .(total_cases = sum(cases, na.rm = T)),
+                          by = "date"]
+temp <- agg.cases.county
+agg.cases.county[, total_cases_prev := temp$total_cases[match(agg.cases.county$date - 1, temp$date)]]
+agg.cases.county[, total_new_cases := total_cases - total_cases_prev]
+agg.new.cases.county.plot <- ggplot(agg.cases.county[date >= "2020-03-01"], aes(x = date, y = total_new_cases)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "Confirmed new COVID cases",
+       title = "Confirmed new COVID cases by day",
+       subtitle = paste0(use.county, " County, ", use.state)) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_y_continuous(labels = comma)
+agg.new.cases.county.plot
+```
+
+```{r message = F, warning = F}
+use.state <- "Tennessee"
+use.county <- "Davidson"
+cases.county <- county.raw[state %in% use.state & county %in% use.county]
+agg.cases.county <- cases.county[order(date),
+                          .(total_cases = sum(cases, na.rm = T)),
+                          by = "date"]
+temp <- agg.cases.county
+agg.cases.county[, total_cases_prev := temp$total_cases[match(agg.cases.county$date - 1, temp$date)]]
+agg.cases.county[, total_new_cases := total_cases - total_cases_prev]
+agg.new.cases.county.plot <- ggplot(agg.cases.county[date >= "2020-03-01"], aes(x = date, y = total_new_cases)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "Confirmed new COVID cases",
+       title = "Confirmed new COVID cases by day",
+       subtitle = paste0(use.county, " County, ", use.state)) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_y_continuous(labels = comma)
+agg.new.cases.county.plot
+```
+
+### Total deaths
+
+#### U.S.
+
+```{r message = F, warning = F}
+agg.deaths.US <- state.raw[order(date),
+                          .(total_deaths = sum(deaths, na.rm = T)),
+                          by = "date"]
+agg.deaths.US.plot <- ggplot(agg.deaths.US[date >= "2020-03-01"], aes(x = date, y = total_deaths)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "Total COVID-related deaths",
+       title = "Total COVID-related deaths",
+       subtitle = "United States") +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_y_continuous(labels = comma)
+agg.deaths.US.plot
+```
+
+#### Our states
+
+```{r message = F, warning = F}
+# adjust state name to flow through rest of code (use capitalized full state name)
+use.state <- "Washington"
+deaths.state <- state.raw[state %in% use.state]
+agg.deaths.state <- cases.state[order(date),
+                          .(total_deaths = sum(deaths, na.rm = T)),
+                          by = "date"]
+agg.deaths.state.plot <- ggplot(agg.deaths.state[date >= "2020-03-01"], aes(x = date, y = total_deaths)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "Total COVID-related deaths",
+       title = "Total COVID-related deaths",
+       subtitle = use.state) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+agg.deaths.state.plot
+```
+
+```{r message = F, warning = F}
+# adjust state name to flow through rest of code (use capitalized full state name)
+use.state <- "California"
+deaths.state <- state.raw[state %in% use.state]
+agg.deaths.state <- cases.state[order(date),
+                          .(total_deaths = sum(deaths, na.rm = T)),
+                          by = "date"]
+agg.deaths.state.plot <- ggplot(agg.deaths.state[date >= "2020-03-01"], aes(x = date, y = total_deaths)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "Total COVID-related deaths",
+       title = "Total COVID-related deaths",
+       subtitle = use.state) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+agg.deaths.state.plot
+```
+
+```{r message = F, warning = F}
+# adjust state name to flow through rest of code (use capitalized full state name)
+use.state <- "South Carolina"
+deaths.state <- state.raw[state %in% use.state]
+agg.deaths.state <- cases.state[order(date),
+                          .(total_deaths = sum(deaths, na.rm = T)),
+                          by = "date"]
+agg.deaths.state.plot <- ggplot(agg.deaths.state[date >= "2020-03-01"], aes(x = date, y = total_deaths)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "Total COVID-related deaths",
+       title = "Total COVID-related deaths",
+       subtitle = use.state) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+agg.deaths.state.plot
+```
+
+```{r message = F, warning = F}
+# adjust state name to flow through rest of code (use capitalized full state name)
+use.state <- "Tennessee"
+deaths.state <- state.raw[state %in% use.state]
+agg.deaths.state <- cases.state[order(date),
+                          .(total_deaths = sum(deaths, na.rm = T)),
+                          by = "date"]
+agg.deaths.state.plot <- ggplot(agg.deaths.state[date >= "2020-03-01"], aes(x = date, y = total_deaths)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "Total COVID-related deaths",
+       title = "Total COVID-related deaths",
+       subtitle = use.state) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+agg.deaths.state.plot
+```
+
+#### Our counties
+
+```{r message = F, warning = F}
+# adjust state and county name to flow through rest of code (use capitalized full state name)
+use.state <- "Washington"
+use.county <- "Pierce"
+deaths.county <- county.raw[state %in% use.state & county %in% use.county]
+agg.deaths.county <- deaths.county[order(date),
+                          .(total_deaths = sum(deaths, na.rm = T)),
+                          by = "date"]
+agg.deaths.county.plot <- ggplot(agg.deaths.county[date >= "2020-03-01"], aes(x = date, y = total_deaths)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "Total COVID-related deaths",
+       title = "Total COVID-related deaths",
+       subtitle = paste0(use.county, " County, ", use.state)) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+agg.deaths.county.plot
+```
+
+```{r message = F, warning = F}
+# adjust state and county name to flow through rest of code (use capitalized full state name)
+use.state <- "California"
+use.county <- "Orange"
+deaths.county <- county.raw[state %in% use.state & county %in% use.county]
+agg.deaths.county <- deaths.county[order(date),
+                          .(total_deaths = sum(deaths, na.rm = T)),
+                          by = "date"]
+agg.deaths.county.plot <- ggplot(agg.deaths.county[date >= "2020-03-01"], aes(x = date, y = total_deaths)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "Total COVID-related deaths",
+       title = "Total COVID-related deaths",
+       subtitle = paste0(use.county, " County, ", use.state)) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+agg.deaths.county.plot
+```
+
+```{r message = F, warning = F}
+# adjust state and county name to flow through rest of code (use capitalized full state name)
+use.state <- "South Carolina"
+use.county <- "Richland"
+deaths.county <- county.raw[state %in% use.state & county %in% use.county]
+agg.deaths.county <- deaths.county[order(date),
+                          .(total_deaths = sum(deaths, na.rm = T)),
+                          by = "date"]
+agg.deaths.county.plot <- ggplot(agg.deaths.county[date >= "2020-03-01"], aes(x = date, y = total_deaths)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "Total COVID-related deaths",
+       title = "Total COVID-related deaths",
+       subtitle = paste0(use.county, " County, ", use.state)) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+agg.deaths.county.plot
+```
+
+```{r message = F, warning = F}
+# adjust state and county name to flow through rest of code (use capitalized full state name)
+use.state <- "South Carolina"
+use.county <- "York"
+deaths.county <- county.raw[state %in% use.state & county %in% use.county]
+agg.deaths.county <- deaths.county[order(date),
+                          .(total_deaths = sum(deaths, na.rm = T)),
+                          by = "date"]
+agg.deaths.county.plot <- ggplot(agg.deaths.county[date >= "2020-03-01"], aes(x = date, y = total_deaths)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "Total COVID-related deaths",
+       title = "Total COVID-related deaths",
+       subtitle = paste0(use.county, " County, ", use.state)) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+agg.deaths.county.plot
+```
+
+```{r message = F, warning = F}
+# adjust state and county name to flow through rest of code (use capitalized full state name)
+use.state <- "Tennessee"
+use.county <- "Davidson"
+deaths.county <- county.raw[state %in% use.state & county %in% use.county]
+agg.deaths.county <- deaths.county[order(date),
+                          .(total_deaths = sum(deaths, na.rm = T)),
+                          by = "date"]
+agg.deaths.county.plot <- ggplot(agg.deaths.county[date >= "2020-03-01"], aes(x = date, y = total_deaths)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "Total COVID-related deaths",
+       title = "Total COVID-related deaths",
+       subtitle = paste0(use.county, " County, ", use.state)) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+agg.deaths.county.plot
+```
+
+### New deaths
+
+#### U.S.
+
+```{r message = F, warning = F}
+agg.deaths.US <- state.raw[order(date),
+                          .(total_deaths = sum(deaths, na.rm = T)),
+                          by = "date"]
+temp <- agg.deaths.US
+agg.deaths.US[, total_deaths_prev := temp$total_deaths[match(agg.deaths.US$date - 1, temp$date)]]
+agg.deaths.US[, total_new_deaths := total_deaths - total_deaths_prev]
+agg.new.deaths.US.plot <- ggplot(agg.deaths.US[date >= "2020-03-01"], aes(x = date, y = total_new_deaths)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "New COVID-related deaths",
+       title = "New COVID-related deaths by day",
+       subtitle = "United States") +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_y_continuous(labels = comma)
+agg.new.deaths.US.plot
+```
+
+#### Our states
+
+```{r message = F, warning = F}
+use.state <- "Washington"
+deaths.state <- state.raw[state %in% use.state]
+agg.deaths.state <- deaths.state[order(date),
+                          .(total_deaths = sum(deaths, na.rm = T)),
+                          by = "date"]
+temp <- agg.deaths.state
+agg.deaths.state[, total_deaths_prev := temp$total_deaths[match(agg.deaths.state$date - 1, temp$date)]]
+agg.deaths.state[, total_new_deaths := total_deaths - total_deaths_prev]
+agg.new.deaths.state.plot <- ggplot(agg.deaths.state[date >= "2020-03-01"], aes(x = date, y = total_new_deaths)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "New COVID-related deaths",
+       title = "New COVID-related deaths by day",
+       subtitle = use.state) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+agg.new.deaths.state.plot
+```
+
+```{r message = F, warning = F}
+use.state <- "California"
+deaths.state <- state.raw[state %in% use.state]
+agg.deaths.state <- deaths.state[order(date),
+                          .(total_deaths = sum(deaths, na.rm = T)),
+                          by = "date"]
+temp <- agg.deaths.state
+agg.deaths.state[, total_deaths_prev := temp$total_deaths[match(agg.deaths.state$date - 1, temp$date)]]
+agg.deaths.state[, total_new_deaths := total_deaths - total_deaths_prev]
+agg.new.deaths.state.plot <- ggplot(agg.deaths.state[date >= "2020-03-01"], aes(x = date, y = total_new_deaths)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "New COVID-related deaths",
+       title = "New COVID-related deaths by day",
+       subtitle = use.state) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+agg.new.deaths.state.plot
+```
+
+```{r message = F, warning = F}
+use.state <- "South Carolina"
+deaths.state <- state.raw[state %in% use.state]
+agg.deaths.state <- deaths.state[order(date),
+                          .(total_deaths = sum(deaths, na.rm = T)),
+                          by = "date"]
+temp <- agg.deaths.state
+agg.deaths.state[, total_deaths_prev := temp$total_deaths[match(agg.deaths.state$date - 1, temp$date)]]
+agg.deaths.state[, total_new_deaths := total_deaths - total_deaths_prev]
+agg.new.deaths.state.plot <- ggplot(agg.deaths.state[date >= "2020-03-01"], aes(x = date, y = total_new_deaths)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "New COVID-related deaths",
+       title = "New COVID-related deaths by day",
+       subtitle = use.state) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+agg.new.deaths.state.plot
+```
+
+```{r message = F, warning = F}
+use.state <- "Tennessee"
+deaths.state <- state.raw[state %in% use.state]
+agg.deaths.state <- deaths.state[order(date),
+                          .(total_deaths = sum(deaths, na.rm = T)),
+                          by = "date"]
+temp <- agg.deaths.state
+agg.deaths.state[, total_deaths_prev := temp$total_deaths[match(agg.deaths.state$date - 1, temp$date)]]
+agg.deaths.state[, total_new_deaths := total_deaths - total_deaths_prev]
+agg.new.deaths.state.plot <- ggplot(agg.deaths.state[date >= "2020-03-01"], aes(x = date, y = total_new_deaths)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "New COVID-related deaths",
+       title = "New COVID-related deaths by day",
+       subtitle = use.state) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+agg.new.deaths.state.plot
+```
+
+#### Our counties
+
+```{r message = F, warning = F}
+use.state <- "Washington"
+use.county <- "Pierce"
+deaths.county <- county.raw[state %in% use.state & county %in% use.county]
+agg.deaths.county <- deaths.county[order(date),
+                          .(total_deaths = sum(deaths, na.rm = T)),
+                          by = "date"]
+temp <- agg.deaths.county
+agg.deaths.county[, total_deaths_prev := temp$total_deaths[match(agg.deaths.county$date - 1, temp$date)]]
+agg.deaths.county[, total_new_deaths := total_deaths - total_deaths_prev]
+agg.new.deaths.county.plot <- ggplot(agg.deaths.county[date >= "2020-03-01"], aes(x = date, y = total_new_deaths)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "New COVID-related deaths",
+       title = "New COVID-related deaths by day",
+       subtitle = paste0(use.county, " County, ", use.state)) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+agg.new.deaths.county.plot
+```
+
+```{r message = F, warning = F}
+use.state <- "California"
+use.county <- "Orange"
+deaths.county <- county.raw[state %in% use.state & county %in% use.county]
+agg.deaths.county <- deaths.county[order(date),
+                          .(total_deaths = sum(deaths, na.rm = T)),
+                          by = "date"]
+temp <- agg.deaths.county
+agg.deaths.county[, total_deaths_prev := temp$total_deaths[match(agg.deaths.county$date - 1, temp$date)]]
+agg.deaths.county[, total_new_deaths := total_deaths - total_deaths_prev]
+agg.new.deaths.county.plot <- ggplot(agg.deaths.county[date >= "2020-03-01"], aes(x = date, y = total_new_deaths)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "New COVID-related deaths",
+       title = "New COVID-related deaths by day",
+       subtitle = paste0(use.county, " County, ", use.state)) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+agg.new.deaths.county.plot
+```
+
+```{r message = F, warning = F}
+use.state <- "South Carolina"
+use.county <- "Richland"
+deaths.county <- county.raw[state %in% use.state & county %in% use.county]
+agg.deaths.county <- deaths.county[order(date),
+                          .(total_deaths = sum(deaths, na.rm = T)),
+                          by = "date"]
+temp <- agg.deaths.county
+agg.deaths.county[, total_deaths_prev := temp$total_deaths[match(agg.deaths.county$date - 1, temp$date)]]
+agg.deaths.county[, total_new_deaths := total_deaths - total_deaths_prev]
+agg.new.deaths.county.plot <- ggplot(agg.deaths.county[date >= "2020-03-01"], aes(x = date, y = total_new_deaths)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "New COVID-related deaths",
+       title = "New COVID-related deaths by day",
+       subtitle = paste0(use.county, " County, ", use.state)) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+agg.new.deaths.county.plot
+```
+
+```{r message = F, warning = F}
+use.state <- "South Carolina"
+use.county <- "York"
+deaths.county <- county.raw[state %in% use.state & county %in% use.county]
+agg.deaths.county <- deaths.county[order(date),
+                          .(total_deaths = sum(deaths, na.rm = T)),
+                          by = "date"]
+temp <- agg.deaths.county
+agg.deaths.county[, total_deaths_prev := temp$total_deaths[match(agg.deaths.county$date - 1, temp$date)]]
+agg.deaths.county[, total_new_deaths := total_deaths - total_deaths_prev]
+agg.new.deaths.county.plot <- ggplot(agg.deaths.county[date >= "2020-03-01"], aes(x = date, y = total_new_deaths)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "New COVID-related deaths",
+       title = "New COVID-related deaths by day",
+       subtitle = paste0(use.county, " County, ", use.state)) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+agg.new.deaths.county.plot
+```
+
+```{r message = F, warning = F}
+use.state <- "Tennessee"
+use.county <- "Davidson"
+deaths.county <- county.raw[state %in% use.state & county %in% use.county]
+agg.deaths.county <- deaths.county[order(date),
+                          .(total_deaths = sum(deaths, na.rm = T)),
+                          by = "date"]
+temp <- agg.deaths.county
+agg.deaths.county[, total_deaths_prev := temp$total_deaths[match(agg.deaths.county$date - 1, temp$date)]]
+agg.deaths.county[, total_new_deaths := total_deaths - total_deaths_prev]
+agg.new.deaths.county.plot <- ggplot(agg.deaths.county[date >= "2020-03-01"], aes(x = date, y = total_new_deaths)) + 
+  geom_bar(stat = "identity") +
+    labs(x = "Date",
+       y = "New COVID-related deaths",
+       title = "New COVID-related deaths by day",
+       subtitle = paste0(use.county, " County, ", use.state)) +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+agg.new.deaths.county.plot
+```
+
+## Stay-at-home comparisons
 * The section is a work in progress -- I'll probably change and add plots over the coming days.
 * I'm trying to see what effect stay-at-home orders have on spread. It's inherentely messy because some states have localized orders but not orders for their full state and because states implemented the orders at different times.
 * The current plot shows the rolling 3-day average of new cases per million residents, averaged across 2 groups of states -- those with a state-wide stay-at-home order in effect and those without. The size of the dots reflect the number of states in each group for each given day (so the dots are getting bigger for the group with orders over time, as more states implement those orders).
@@ -1363,7 +1510,7 @@ state.per.cap.plot
 * Over time (if the policies work), what we'd expect is that the line for the group with orders flattens a bit, but we'll see. It also may become moot if all states issue orders.
 * The next plot I want to add will show rate of spread based on how long an order has been in effect, but still thinking about how to do this. Mostly, I'm trying to decide what the right baseline is to compare against.
 
-```{r echo = F, message = F, warning = F}
+```{r message = F, warning = F}
 state.dt <- state.raw
 state.dt[, stay_date := stay_dates$start_date[match(state.raw$state, stay_dates$state)]]
 state.dt[, population := stay_dates$population[match(state.raw$state, stay_dates$state)]]
@@ -1389,7 +1536,7 @@ state.agg.comp.plot <- ggplot(state.agg.comp, aes(x = date, y = avgNewCases, col
     labs(x = "Date",
        y = "New confirmed COVID cases per million residents",
        title = "New COVID cases vs.stay-at-home order",
-       subtitle = "New cases are a 3-day rolling average per million residents",
+       subtitle = "Average of 3-day rolling totals per million residents",
        size = "Count of states",
        colour = "Stay-at-home order") +
   theme(plot.title = element_text(hjust = 0.5),
