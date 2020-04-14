@@ -10,14 +10,14 @@ date: '`r format(Sys.time(), "%B %d, %Y")`'
 ---
 
 ## Background
-Notes and format last updated Apr 9, 2020
+Notes and format last updated Apr 13, 2020
 
 * This page shows COVID data broken down into regions that affect our family. It pulls from publicly available raw data from the NY Times, which is reported daily. It's on a one-day lag, so when you see this report, the most recent day included will be the day prior.
 
-* The page starts by showing growth rates. I've moved down the raw numbers to later in the page because you can see them everywhere, and it's sometimes hard to understand trends looking at them. Growth rates seem to me to be more important for understanding our progress.
-  * For the U.S. and each of our states, we show two growth rate charts: confirmed cases (total and new) and deaths (total and new). Each chart has two lines: a growth-rate in the rolling three-day *total* of cases (or deaths) and a growth rate in a rolling three-day average of *new* cases (or deaths).
-    * For total cases (or deaths), the charts show the growth rate in total cases (or deaths) over the previous three days for each respective date. For example, a three-day growth rate of 100% for total cases means that total cases are doubling every three days. This rate can't go below zero (because total cases (or deaths) can never go down), but we want it to get as close to zero as possible.
-    * For new cases (or deaths), the charts show the daily growth rate in the average number of new cases (or deaths) for the previous three days. This rate can go below zero because we'll eventually start to see consistently less new cases (or deaths) each day. When the new case (or death) growth rate is consistently below zero, it means we're on the other side of the "apex."
+* The page starts by showing growth rates. I've moved down the raw numbers to later in the page because you can see raw numbers everywhere, and it's sometimes hard to understand trends by looking only at them. Growth rates seem to me to be more important for understanding our progress.
+  * For the U.S. and each of our states, there are two growth rate charts: confirmed cases and deaths. Each chart then has two lines: one for total cases or deaths, and one for new cases or deaths. Each of these lines is a rolling three-day average of daily growth rates for that particular metric. Note that I recently changed this so that each line is an avergae of *daily* growth rates, which better aligns the metrics, but can also make some of the trendlines a bit bumpier.
+    * For total cases (or deaths), the trendlines will be a bit smoother and more consistent. We want to see these decline (and almost all are), but they can't go below zero because total cases (or deaths) can never go down. We at least want them to get as close to zero as possible.
+    * For new cases (or deaths), the lines are a bit bumpier, in particular for states. While the trends aren't as smooth, we want to wtach for them to get consistently below zero and stay there. That means that we are consistently seeing less new cases (or deaths) on a daily basis and that we're on the other side of the "apex."
 
 * The page then shows state and county rankings normalized for population (number of cases or deaths per million residents).
   * For states, it shows tables ranking all 50 states for per populations rates of total cases, new cases, total deaths, and new deaths. In addition to the tables, the trends for the top states are plotted over time.
@@ -32,7 +32,7 @@ Notes and format last updated Apr 9, 2020
 
 * Finally, the last section compares data from states that have and have not enacted state-wide stay-at-home orders, trying to see if there are any effects of the orders. It's a work in progress, and there are more extensive notes in that section.
 
-```{r include = F, results = 'hide'}
+```{r echo = F, include = F, results = 'hide'}
 # load packages
 library(data.table)
 library(ggplot2)
@@ -48,12 +48,12 @@ options(scipen = 999)
 
 ```
 
-```{r include = F, results = 'hide'}
+```{r echo = F, include = F, results = 'hide'}
 state.raw <- data.table(read.csv(file=url("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-states.csv"), header = T))
 county.raw <- data.table(read.csv(file=url("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv"), header = T))
 ```
 
-```{r include = F, results = 'hide'}
+```{r echo = F, include = F, results = 'hide'}
 # format dates
 state.raw[, date := as.Date(date)]
 county.raw[, date := as.Date(date)]
@@ -75,28 +75,39 @@ county_pop[, CTYNAME := gsub("(.*) County", "\\1", CTYNAME)]
 
 #### U.S.
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 agg.cases.US <- state.raw[order(date),
                           .(total_cases = sum(cases, na.rm = T)),
                           by = "date"]
 
+# make single day total and new cash growth rates
 temp <- agg.cases.US
-agg.cases.US[, total_cases_prev3 := temp$total_cases[match(agg.cases.US$date - 3, temp$date)]]
-agg.cases.US[, total_cases_rtgrowth := total_cases/total_cases_prev3 - 1]
-agg.cases.US[, new_cases_prev3 := total_cases - total_cases_prev3]
-
+agg.cases.US[, total_cases_prev := temp$total_cases[match(agg.cases.US$date - 1, temp$date)]]
+agg.cases.US[, total_cases_rtgrowth := total_cases/total_cases_prev - 1]
+agg.cases.US[, new_cases := total_cases - total_cases_prev]
 temp <- agg.cases.US
-agg.cases.US[, new_cases_prev3_last := temp$new_cases_prev3[match(agg.cases.US$date - 1, temp$date)]]
-agg.cases.US[, new_cases_rtgrowth := new_cases_prev3/new_cases_prev3_last - 1]
+agg.cases.US[, new_cases_prev := temp$new_cases[match(agg.cases.US$date - 1, temp$date)]]
+agg.cases.US[, new_cases_rtgrowth := new_cases/new_cases_prev - 1]
 
-melt.use <- melt(agg.cases.US[, c("date", "total_cases_rtgrowth", "new_cases_rtgrowth")], id.vars = "date")
-melt.use[, variable := ifelse(variable %in% "total_cases_rtgrowth", "Total Cases", "New Cases")]
+# now make a 3-day rolling total avg
+temp <- agg.cases.US
+agg.cases.US[, total_cases_rtgrowth_prev1 := temp$total_cases_rtgrowth[match(agg.cases.US$date - 1, temp$date)]]
+agg.cases.US[, total_cases_rtgrowth_prev2 := temp$total_cases_rtgrowth[match(agg.cases.US$date - 2, temp$date)]]
+agg.cases.US[, total_cases_rtgrowth_rolling3 := (total_cases_rtgrowth + total_cases_rtgrowth_prev1 + total_cases_rtgrowth_prev2)/3]
+
+# now make a 3-day rolling new avg
+agg.cases.US[, new_cases_rtgrowth_prev1 := temp$new_cases_rtgrowth[match(agg.cases.US$date - 1, temp$date)]]
+agg.cases.US[, new_cases_rtgrowth_prev2 := temp$new_cases_rtgrowth[match(agg.cases.US$date - 2, temp$date)]]
+agg.cases.US[, new_cases_rtgrowth_rolling3 := (new_cases_rtgrowth + new_cases_rtgrowth_prev1 + new_cases_rtgrowth_prev2)/3]
+
+melt.use <- melt(agg.cases.US[, c("date", "total_cases_rtgrowth_rolling3", "new_cases_rtgrowth_rolling3")], id.vars = "date")
+melt.use[, variable := ifelse(variable %in% "total_cases_rtgrowth_rolling3", "Total Cases", "New Cases")]
 
 agg.cases.growth.US.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = date, y = value, color = variable)) + 
   geom_line(aes(group = variable)) +
     labs(x = "Date",
-       y = "Rate of growth (rolling 3-day window)",
-       title = "Rolling 3-day rate of growth: Confirmed COVID cases",
+       y = "Daily growth rate (rolling 3-day avg)",
+       title = "Daily growth rate (3-day rolling avg): Confirmed COVID cases",
        subtitle = "United States",
        color = "Metric") +
   theme(plot.title = element_text(hjust = 0.5),
@@ -108,30 +119,41 @@ agg.cases.growth.US.plot
 
 #### Our states
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 use.state <- "Washington"
 cases.state <- state.raw[state %in% use.state]
 agg.cases.state <- cases.state[order(date),
                           .(total_cases = sum(cases, na.rm = T)),
                           by = "date"]
 
+# make single day total and new cash growth rates
 temp <- agg.cases.state
-agg.cases.state[, total_cases_prev3 := temp$total_cases[match(agg.cases.state$date - 3, temp$date)]]
-agg.cases.state[, total_cases_rtgrowth := total_cases/total_cases_prev3 - 1]
-agg.cases.state[, new_cases_prev3 := total_cases - total_cases_prev3]
-
+agg.cases.state[, total_cases_prev := temp$total_cases[match(agg.cases.state$date - 1, temp$date)]]
+agg.cases.state[, total_cases_rtgrowth := total_cases/total_cases_prev - 1]
+agg.cases.state[, new_cases := total_cases - total_cases_prev]
 temp <- agg.cases.state
-agg.cases.state[, new_cases_prev3_last := temp$new_cases_prev3[match(agg.cases.state$date - 1, temp$date)]]
-agg.cases.state[, new_cases_rtgrowth := new_cases_prev3/new_cases_prev3_last - 1]
+agg.cases.state[, new_cases_prev := temp$new_cases[match(agg.cases.state$date - 1, temp$date)]]
+agg.cases.state[, new_cases_rtgrowth := new_cases/new_cases_prev - 1]
 
-melt.use <- melt(agg.cases.state[, c("date", "total_cases_rtgrowth", "new_cases_rtgrowth")], id.vars = "date")
-melt.use[, variable := ifelse(variable %in% "total_cases_rtgrowth", "Total Cases", "New Cases")]
+# now make a 3-day rolling total avg
+temp <- agg.cases.state
+agg.cases.state[, total_cases_rtgrowth_prev1 := temp$total_cases_rtgrowth[match(agg.cases.state$date - 1, temp$date)]]
+agg.cases.state[, total_cases_rtgrowth_prev2 := temp$total_cases_rtgrowth[match(agg.cases.state$date - 2, temp$date)]]
+agg.cases.state[, total_cases_rtgrowth_rolling3 := (total_cases_rtgrowth + total_cases_rtgrowth_prev1 + total_cases_rtgrowth_prev2)/3]
+
+# now make a 3-day rolling new avg
+agg.cases.state[, new_cases_rtgrowth_prev1 := temp$new_cases_rtgrowth[match(agg.cases.state$date - 1, temp$date)]]
+agg.cases.state[, new_cases_rtgrowth_prev2 := temp$new_cases_rtgrowth[match(agg.cases.state$date - 2, temp$date)]]
+agg.cases.state[, new_cases_rtgrowth_rolling3 := (new_cases_rtgrowth + new_cases_rtgrowth_prev1 + new_cases_rtgrowth_prev2)/3]
+
+melt.use <- melt(agg.cases.state[, c("date", "total_cases_rtgrowth_rolling3", "new_cases_rtgrowth_rolling3")], id.vars = "date")
+melt.use[, variable := ifelse(variable %in% "total_cases_rtgrowth_rolling3", "Total Cases", "New Cases")]
 
 agg.cases.growth.state.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = date, y = value, color = variable)) + 
   geom_line(aes(group = variable)) +
     labs(x = "Date",
-       y = "Rate of growth (rolling 3-day window)",
-       title = "Rolling 3-day rate of growth: Confirmed COVID cases",
+       y = "Daily growth rate (rolling 3-day avg)",
+       title = "Daily growth rate (3-day rolling avg): Confirmed COVID cases",
        subtitle = use.state,
        color = "Metric") +
   theme(plot.title = element_text(hjust = 0.5),
@@ -141,30 +163,41 @@ agg.cases.growth.state.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = da
 agg.cases.growth.state.plot
 ```
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 use.state <- "California"
 cases.state <- state.raw[state %in% use.state]
 agg.cases.state <- cases.state[order(date),
                           .(total_cases = sum(cases, na.rm = T)),
                           by = "date"]
 
+# make single day total and new cash growth rates
 temp <- agg.cases.state
-agg.cases.state[, total_cases_prev3 := temp$total_cases[match(agg.cases.state$date - 3, temp$date)]]
-agg.cases.state[, total_cases_rtgrowth := total_cases/total_cases_prev3 - 1]
-agg.cases.state[, new_cases_prev3 := total_cases - total_cases_prev3]
-
+agg.cases.state[, total_cases_prev := temp$total_cases[match(agg.cases.state$date - 1, temp$date)]]
+agg.cases.state[, total_cases_rtgrowth := total_cases/total_cases_prev - 1]
+agg.cases.state[, new_cases := total_cases - total_cases_prev]
 temp <- agg.cases.state
-agg.cases.state[, new_cases_prev3_last := temp$new_cases_prev3[match(agg.cases.state$date - 1, temp$date)]]
-agg.cases.state[, new_cases_rtgrowth := new_cases_prev3/new_cases_prev3_last - 1]
+agg.cases.state[, new_cases_prev := temp$new_cases[match(agg.cases.state$date - 1, temp$date)]]
+agg.cases.state[, new_cases_rtgrowth := new_cases/new_cases_prev - 1]
 
-melt.use <- melt(agg.cases.state[, c("date", "total_cases_rtgrowth", "new_cases_rtgrowth")], id.vars = "date")
-melt.use[, variable := ifelse(variable %in% "total_cases_rtgrowth", "Total Cases", "New Cases")]
+# now make a 3-day rolling total avg
+temp <- agg.cases.state
+agg.cases.state[, total_cases_rtgrowth_prev1 := temp$total_cases_rtgrowth[match(agg.cases.state$date - 1, temp$date)]]
+agg.cases.state[, total_cases_rtgrowth_prev2 := temp$total_cases_rtgrowth[match(agg.cases.state$date - 2, temp$date)]]
+agg.cases.state[, total_cases_rtgrowth_rolling3 := (total_cases_rtgrowth + total_cases_rtgrowth_prev1 + total_cases_rtgrowth_prev2)/3]
+
+# now make a 3-day rolling new avg
+agg.cases.state[, new_cases_rtgrowth_prev1 := temp$new_cases_rtgrowth[match(agg.cases.state$date - 1, temp$date)]]
+agg.cases.state[, new_cases_rtgrowth_prev2 := temp$new_cases_rtgrowth[match(agg.cases.state$date - 2, temp$date)]]
+agg.cases.state[, new_cases_rtgrowth_rolling3 := (new_cases_rtgrowth + new_cases_rtgrowth_prev1 + new_cases_rtgrowth_prev2)/3]
+
+melt.use <- melt(agg.cases.state[, c("date", "total_cases_rtgrowth_rolling3", "new_cases_rtgrowth_rolling3")], id.vars = "date")
+melt.use[, variable := ifelse(variable %in% "total_cases_rtgrowth_rolling3", "Total Cases", "New Cases")]
 
 agg.cases.growth.state.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = date, y = value, color = variable)) + 
   geom_line(aes(group = variable)) +
     labs(x = "Date",
-       y = "Rate of growth (rolling 3-day window)",
-       title = "Rolling 3-day rate of growth: Confirmed COVID cases",
+       y = "Daily growth rate (rolling 3-day avg)",
+       title = "Daily growth rate (3-day rolling avg): Confirmed COVID cases",
        subtitle = use.state,
        color = "Metric") +
   theme(plot.title = element_text(hjust = 0.5),
@@ -174,30 +207,41 @@ agg.cases.growth.state.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = da
 agg.cases.growth.state.plot
 ```
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 use.state <- "South Carolina"
 cases.state <- state.raw[state %in% use.state]
 agg.cases.state <- cases.state[order(date),
                           .(total_cases = sum(cases, na.rm = T)),
                           by = "date"]
 
+# make single day total and new cash growth rates
 temp <- agg.cases.state
-agg.cases.state[, total_cases_prev3 := temp$total_cases[match(agg.cases.state$date - 3, temp$date)]]
-agg.cases.state[, total_cases_rtgrowth := total_cases/total_cases_prev3 - 1]
-agg.cases.state[, new_cases_prev3 := total_cases - total_cases_prev3]
-
+agg.cases.state[, total_cases_prev := temp$total_cases[match(agg.cases.state$date - 1, temp$date)]]
+agg.cases.state[, total_cases_rtgrowth := total_cases/total_cases_prev - 1]
+agg.cases.state[, new_cases := total_cases - total_cases_prev]
 temp <- agg.cases.state
-agg.cases.state[, new_cases_prev3_last := temp$new_cases_prev3[match(agg.cases.state$date - 1, temp$date)]]
-agg.cases.state[, new_cases_rtgrowth := new_cases_prev3/new_cases_prev3_last - 1]
+agg.cases.state[, new_cases_prev := temp$new_cases[match(agg.cases.state$date - 1, temp$date)]]
+agg.cases.state[, new_cases_rtgrowth := new_cases/new_cases_prev - 1]
 
-melt.use <- melt(agg.cases.state[, c("date", "total_cases_rtgrowth", "new_cases_rtgrowth")], id.vars = "date")
-melt.use[, variable := ifelse(variable %in% "total_cases_rtgrowth", "Total Cases", "New Cases")]
+# now make a 3-day rolling total avg
+temp <- agg.cases.state
+agg.cases.state[, total_cases_rtgrowth_prev1 := temp$total_cases_rtgrowth[match(agg.cases.state$date - 1, temp$date)]]
+agg.cases.state[, total_cases_rtgrowth_prev2 := temp$total_cases_rtgrowth[match(agg.cases.state$date - 2, temp$date)]]
+agg.cases.state[, total_cases_rtgrowth_rolling3 := (total_cases_rtgrowth + total_cases_rtgrowth_prev1 + total_cases_rtgrowth_prev2)/3]
+
+# now make a 3-day rolling new avg
+agg.cases.state[, new_cases_rtgrowth_prev1 := temp$new_cases_rtgrowth[match(agg.cases.state$date - 1, temp$date)]]
+agg.cases.state[, new_cases_rtgrowth_prev2 := temp$new_cases_rtgrowth[match(agg.cases.state$date - 2, temp$date)]]
+agg.cases.state[, new_cases_rtgrowth_rolling3 := (new_cases_rtgrowth + new_cases_rtgrowth_prev1 + new_cases_rtgrowth_prev2)/3]
+
+melt.use <- melt(agg.cases.state[, c("date", "total_cases_rtgrowth_rolling3", "new_cases_rtgrowth_rolling3")], id.vars = "date")
+melt.use[, variable := ifelse(variable %in% "total_cases_rtgrowth_rolling3", "Total Cases", "New Cases")]
 
 agg.cases.growth.state.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = date, y = value, color = variable)) + 
   geom_line(aes(group = variable)) +
     labs(x = "Date",
-       y = "Rate of growth (rolling 3-day window)",
-       title = "Rolling 3-day rate of growth: Confirmed COVID cases",
+       y = "Daily growth rate (rolling 3-day avg)",
+       title = "Daily growth rate (3-day rolling avg): Confirmed COVID cases",
        subtitle = use.state,
        color = "Metric") +
   theme(plot.title = element_text(hjust = 0.5),
@@ -207,30 +251,41 @@ agg.cases.growth.state.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = da
 agg.cases.growth.state.plot
 ```
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 use.state <- "Tennessee"
 cases.state <- state.raw[state %in% use.state]
 agg.cases.state <- cases.state[order(date),
                           .(total_cases = sum(cases, na.rm = T)),
                           by = "date"]
 
+# make single day total and new cash growth rates
 temp <- agg.cases.state
-agg.cases.state[, total_cases_prev3 := temp$total_cases[match(agg.cases.state$date - 3, temp$date)]]
-agg.cases.state[, total_cases_rtgrowth := total_cases/total_cases_prev3 - 1]
-agg.cases.state[, new_cases_prev3 := total_cases - total_cases_prev3]
-
+agg.cases.state[, total_cases_prev := temp$total_cases[match(agg.cases.state$date - 1, temp$date)]]
+agg.cases.state[, total_cases_rtgrowth := total_cases/total_cases_prev - 1]
+agg.cases.state[, new_cases := total_cases - total_cases_prev]
 temp <- agg.cases.state
-agg.cases.state[, new_cases_prev3_last := temp$new_cases_prev3[match(agg.cases.state$date - 1, temp$date)]]
-agg.cases.state[, new_cases_rtgrowth := new_cases_prev3/new_cases_prev3_last - 1]
+agg.cases.state[, new_cases_prev := temp$new_cases[match(agg.cases.state$date - 1, temp$date)]]
+agg.cases.state[, new_cases_rtgrowth := new_cases/new_cases_prev - 1]
 
-melt.use <- melt(agg.cases.state[, c("date", "total_cases_rtgrowth", "new_cases_rtgrowth")], id.vars = "date")
-melt.use[, variable := ifelse(variable %in% "total_cases_rtgrowth", "Total Cases", "New Cases")]
+# now make a 3-day rolling total avg
+temp <- agg.cases.state
+agg.cases.state[, total_cases_rtgrowth_prev1 := temp$total_cases_rtgrowth[match(agg.cases.state$date - 1, temp$date)]]
+agg.cases.state[, total_cases_rtgrowth_prev2 := temp$total_cases_rtgrowth[match(agg.cases.state$date - 2, temp$date)]]
+agg.cases.state[, total_cases_rtgrowth_rolling3 := (total_cases_rtgrowth + total_cases_rtgrowth_prev1 + total_cases_rtgrowth_prev2)/3]
+
+# now make a 3-day rolling new avg
+agg.cases.state[, new_cases_rtgrowth_prev1 := temp$new_cases_rtgrowth[match(agg.cases.state$date - 1, temp$date)]]
+agg.cases.state[, new_cases_rtgrowth_prev2 := temp$new_cases_rtgrowth[match(agg.cases.state$date - 2, temp$date)]]
+agg.cases.state[, new_cases_rtgrowth_rolling3 := (new_cases_rtgrowth + new_cases_rtgrowth_prev1 + new_cases_rtgrowth_prev2)/3]
+
+melt.use <- melt(agg.cases.state[, c("date", "total_cases_rtgrowth_rolling3", "new_cases_rtgrowth_rolling3")], id.vars = "date")
+melt.use[, variable := ifelse(variable %in% "total_cases_rtgrowth_rolling3", "Total Cases", "New Cases")]
 
 agg.cases.growth.state.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = date, y = value, color = variable)) + 
   geom_line(aes(group = variable)) +
     labs(x = "Date",
-       y = "Rate of growth (rolling 3-day window)",
-       title = "Rolling 3-day rate of growth: Confirmed COVID cases",
+       y = "Daily growth rate (rolling 3-day avg)",
+       title = "Daily growth rate (3-day rolling avg): Confirmed COVID cases",
        subtitle = use.state,
        color = "Metric") +
   theme(plot.title = element_text(hjust = 0.5),
@@ -244,28 +299,39 @@ agg.cases.growth.state.plot
 
 #### U.S.
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 agg.deaths.US <- state.raw[order(date),
                           .(total_deaths = sum(deaths, na.rm = T)),
                           by = "date"]
 
+# make single day total and new cash growth rates
 temp <- agg.deaths.US
-agg.deaths.US[, total_deaths_prev3 := temp$total_deaths[match(agg.deaths.US$date - 3, temp$date)]]
-agg.deaths.US[, total_deaths_rtgrowth := total_deaths/total_deaths_prev3 - 1]
-agg.deaths.US[, new_deaths_prev3 := total_deaths - total_deaths_prev3]
-
+agg.deaths.US[, total_deaths_prev := temp$total_deaths[match(agg.deaths.US$date - 1, temp$date)]]
+agg.deaths.US[, total_deaths_rtgrowth := total_deaths/total_deaths_prev - 1]
+agg.deaths.US[, new_deaths := total_deaths - total_deaths_prev]
 temp <- agg.deaths.US
-agg.deaths.US[, new_deaths_prev3_last := temp$new_deaths_prev3[match(agg.deaths.US$date - 1, temp$date)]]
-agg.deaths.US[, new_deaths_rtgrowth := new_deaths_prev3/new_deaths_prev3_last - 1]
+agg.deaths.US[, new_deaths_prev := temp$new_deaths[match(agg.deaths.US$date - 1, temp$date)]]
+agg.deaths.US[, new_deaths_rtgrowth := new_deaths/new_deaths_prev - 1]
 
-melt.use <- melt(agg.deaths.US[, c("date", "total_deaths_rtgrowth", "new_deaths_rtgrowth")], id.vars = "date")
-melt.use[, variable := ifelse(variable %in% "total_deaths_rtgrowth", "Total Deaths", "New Deaths")]
+# now make a 3-day rolling total avg
+temp <- agg.deaths.US
+agg.deaths.US[, total_deaths_rtgrowth_prev1 := temp$total_deaths_rtgrowth[match(agg.deaths.US$date - 1, temp$date)]]
+agg.deaths.US[, total_deaths_rtgrowth_prev2 := temp$total_deaths_rtgrowth[match(agg.deaths.US$date - 2, temp$date)]]
+agg.deaths.US[, total_deaths_rtgrowth_rolling3 := (total_deaths_rtgrowth + total_deaths_rtgrowth_prev1 + total_deaths_rtgrowth_prev2)/3]
+
+# now make a 3-day rolling new avg
+agg.deaths.US[, new_deaths_rtgrowth_prev1 := temp$new_deaths_rtgrowth[match(agg.deaths.US$date - 1, temp$date)]]
+agg.deaths.US[, new_deaths_rtgrowth_prev2 := temp$new_deaths_rtgrowth[match(agg.deaths.US$date - 2, temp$date)]]
+agg.deaths.US[, new_deaths_rtgrowth_rolling3 := (new_deaths_rtgrowth + new_deaths_rtgrowth_prev1 + new_deaths_rtgrowth_prev2)/3]
+
+melt.use <- melt(agg.deaths.US[, c("date", "total_deaths_rtgrowth_rolling3", "new_deaths_rtgrowth_rolling3")], id.vars = "date")
+melt.use[, variable := ifelse(variable %in% "total_deaths_rtgrowth_rolling3", "Total Deaths", "New Deaths")]
 
 agg.deaths.growth.US.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = date, y = value, color = variable)) + 
   geom_line(aes(group = variable)) +
     labs(x = "Date",
-       y = "Rate of growth (rolling 3-day window)",
-       title = "Rolling 3-day rate of growth: Confirmed COVID deaths",
+       y = "Daily growth rate (rolling 3-day avg)",
+       title = "Daily growth rate (3-day rolling avg): Confirmed COVID deaths",
        subtitle = "United States",
        color = "Metric") +
   theme(plot.title = element_text(hjust = 0.5),
@@ -277,30 +343,41 @@ agg.deaths.growth.US.plot
 
 #### Our states
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 use.state <- "Washington"
 deaths.state <- state.raw[state %in% use.state]
 agg.deaths.state <- deaths.state[order(date),
                           .(total_deaths = sum(deaths, na.rm = T)),
                           by = "date"]
 
+# make single day total and new cash growth rates
 temp <- agg.deaths.state
-agg.deaths.state[, total_deaths_prev3 := temp$total_deaths[match(agg.deaths.state$date - 3, temp$date)]]
-agg.deaths.state[, total_deaths_rtgrowth := total_deaths/total_deaths_prev3 - 1]
-agg.deaths.state[, new_deaths_prev3 := total_deaths - total_deaths_prev3]
-
+agg.deaths.state[, total_deaths_prev := temp$total_deaths[match(agg.deaths.state$date - 1, temp$date)]]
+agg.deaths.state[, total_deaths_rtgrowth := total_deaths/total_deaths_prev - 1]
+agg.deaths.state[, new_deaths := total_deaths - total_deaths_prev]
 temp <- agg.deaths.state
-agg.deaths.state[, new_deaths_prev3_last := temp$new_deaths_prev3[match(agg.deaths.state$date - 1, temp$date)]]
-agg.deaths.state[, new_deaths_rtgrowth := new_deaths_prev3/new_deaths_prev3_last - 1]
+agg.deaths.state[, new_deaths_prev := temp$new_deaths[match(agg.deaths.state$date - 1, temp$date)]]
+agg.deaths.state[, new_deaths_rtgrowth := new_deaths/new_deaths_prev - 1]
 
-melt.use <- melt(agg.deaths.state[, c("date", "total_deaths_rtgrowth", "new_deaths_rtgrowth")], id.vars = "date")
-melt.use[, variable := ifelse(variable %in% "total_deaths_rtgrowth", "Total Deaths", "New Deaths")]
+# now make a 3-day rolling total avg
+temp <- agg.deaths.state
+agg.deaths.state[, total_deaths_rtgrowth_prev1 := temp$total_deaths_rtgrowth[match(agg.deaths.state$date - 1, temp$date)]]
+agg.deaths.state[, total_deaths_rtgrowth_prev2 := temp$total_deaths_rtgrowth[match(agg.deaths.state$date - 2, temp$date)]]
+agg.deaths.state[, total_deaths_rtgrowth_rolling3 := (total_deaths_rtgrowth + total_deaths_rtgrowth_prev1 + total_deaths_rtgrowth_prev2)/3]
+
+# now make a 3-day rolling new avg
+agg.deaths.state[, new_deaths_rtgrowth_prev1 := temp$new_deaths_rtgrowth[match(agg.deaths.state$date - 1, temp$date)]]
+agg.deaths.state[, new_deaths_rtgrowth_prev2 := temp$new_deaths_rtgrowth[match(agg.deaths.state$date - 2, temp$date)]]
+agg.deaths.state[, new_deaths_rtgrowth_rolling3 := (new_deaths_rtgrowth + new_deaths_rtgrowth_prev1 + new_deaths_rtgrowth_prev2)/3]
+
+melt.use <- melt(agg.deaths.state[, c("date", "total_deaths_rtgrowth_rolling3", "new_deaths_rtgrowth_rolling3")], id.vars = "date")
+melt.use[, variable := ifelse(variable %in% "total_deaths_rtgrowth_rolling3", "Total Deaths", "New Deaths")]
 
 agg.deaths.growth.state.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = date, y = value, color = variable)) + 
   geom_line(aes(group = variable)) +
     labs(x = "Date",
-       y = "Rate of growth (rolling 3-day window)",
-       title = "Rolling 3-day rate of growth: Confirmed COVID deaths",
+       y = "Daily growth rate (rolling 3-day avg)",
+       title = "Daily growth rate (3-day rolling avg): Confirmed COVID deaths",
        subtitle = use.state,
        color = "Metric") +
   theme(plot.title = element_text(hjust = 0.5),
@@ -310,30 +387,41 @@ agg.deaths.growth.state.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = d
 agg.deaths.growth.state.plot
 ```
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 use.state <- "California"
 deaths.state <- state.raw[state %in% use.state]
 agg.deaths.state <- deaths.state[order(date),
                           .(total_deaths = sum(deaths, na.rm = T)),
                           by = "date"]
 
+# make single day total and new cash growth rates
 temp <- agg.deaths.state
-agg.deaths.state[, total_deaths_prev3 := temp$total_deaths[match(agg.deaths.state$date - 3, temp$date)]]
-agg.deaths.state[, total_deaths_rtgrowth := total_deaths/total_deaths_prev3 - 1]
-agg.deaths.state[, new_deaths_prev3 := total_deaths - total_deaths_prev3]
-
+agg.deaths.state[, total_deaths_prev := temp$total_deaths[match(agg.deaths.state$date - 1, temp$date)]]
+agg.deaths.state[, total_deaths_rtgrowth := total_deaths/total_deaths_prev - 1]
+agg.deaths.state[, new_deaths := total_deaths - total_deaths_prev]
 temp <- agg.deaths.state
-agg.deaths.state[, new_deaths_prev3_last := temp$new_deaths_prev3[match(agg.deaths.state$date - 1, temp$date)]]
-agg.deaths.state[, new_deaths_rtgrowth := new_deaths_prev3/new_deaths_prev3_last - 1]
+agg.deaths.state[, new_deaths_prev := temp$new_deaths[match(agg.deaths.state$date - 1, temp$date)]]
+agg.deaths.state[, new_deaths_rtgrowth := new_deaths/new_deaths_prev - 1]
 
-melt.use <- melt(agg.deaths.state[, c("date", "total_deaths_rtgrowth", "new_deaths_rtgrowth")], id.vars = "date")
-melt.use[, variable := ifelse(variable %in% "total_deaths_rtgrowth", "Total Deaths", "New Deaths")]
+# now make a 3-day rolling total avg
+temp <- agg.deaths.state
+agg.deaths.state[, total_deaths_rtgrowth_prev1 := temp$total_deaths_rtgrowth[match(agg.deaths.state$date - 1, temp$date)]]
+agg.deaths.state[, total_deaths_rtgrowth_prev2 := temp$total_deaths_rtgrowth[match(agg.deaths.state$date - 2, temp$date)]]
+agg.deaths.state[, total_deaths_rtgrowth_rolling3 := (total_deaths_rtgrowth + total_deaths_rtgrowth_prev1 + total_deaths_rtgrowth_prev2)/3]
+
+# now make a 3-day rolling new avg
+agg.deaths.state[, new_deaths_rtgrowth_prev1 := temp$new_deaths_rtgrowth[match(agg.deaths.state$date - 1, temp$date)]]
+agg.deaths.state[, new_deaths_rtgrowth_prev2 := temp$new_deaths_rtgrowth[match(agg.deaths.state$date - 2, temp$date)]]
+agg.deaths.state[, new_deaths_rtgrowth_rolling3 := (new_deaths_rtgrowth + new_deaths_rtgrowth_prev1 + new_deaths_rtgrowth_prev2)/3]
+
+melt.use <- melt(agg.deaths.state[, c("date", "total_deaths_rtgrowth_rolling3", "new_deaths_rtgrowth_rolling3")], id.vars = "date")
+melt.use[, variable := ifelse(variable %in% "total_deaths_rtgrowth_rolling3", "Total Deaths", "New Deaths")]
 
 agg.deaths.growth.state.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = date, y = value, color = variable)) + 
   geom_line(aes(group = variable)) +
     labs(x = "Date",
-       y = "Rate of growth (rolling 3-day window)",
-       title = "Rolling 3-day rate of growth: Confirmed COVID deaths",
+       y = "Daily growth rate (rolling 3-day avg)",
+       title = "Daily growth rate (3-day rolling avg): Confirmed COVID deaths",
        subtitle = use.state,
        color = "Metric") +
   theme(plot.title = element_text(hjust = 0.5),
@@ -343,29 +431,41 @@ agg.deaths.growth.state.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = d
 agg.deaths.growth.state.plot
 ```
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 use.state <- "South Carolina"
 deaths.state <- state.raw[state %in% use.state]
 agg.deaths.state <- deaths.state[order(date),
                           .(total_deaths = sum(deaths, na.rm = T)),
                           by = "date"]
 
+# make single day total and new cash growth rates
 temp <- agg.deaths.state
-agg.deaths.state[, total_deaths_prev3 := temp$total_deaths[match(agg.deaths.state$date - 3, temp$date)]]
-agg.deaths.state[, total_deaths_rtgrowth := total_deaths/total_deaths_prev3 - 1]
-agg.deaths.state[, new_deaths_prev3 := total_deaths - total_deaths_prev3]
+agg.deaths.state[, total_deaths_prev := temp$total_deaths[match(agg.deaths.state$date - 1, temp$date)]]
+agg.deaths.state[, total_deaths_rtgrowth := total_deaths/total_deaths_prev - 1]
+agg.deaths.state[, new_deaths := total_deaths - total_deaths_prev]
+temp <- agg.deaths.state
+agg.deaths.state[, new_deaths_prev := temp$new_deaths[match(agg.deaths.state$date - 1, temp$date)]]
+agg.deaths.state[, new_deaths_rtgrowth := new_deaths/new_deaths_prev - 1]
 
+# now make a 3-day rolling total avg
 temp <- agg.deaths.state
-agg.deaths.state[, new_deaths_prev3_last := temp$new_deaths_prev3[match(agg.deaths.state$date - 1, temp$date)]]
-agg.deaths.state[, new_deaths_rtgrowth := new_deaths_prev3/new_deaths_prev3_last - 1]
-melt.use <- melt(agg.deaths.state[, c("date", "total_deaths_rtgrowth", "new_deaths_rtgrowth")], id.vars = "date")
-melt.use[, variable := ifelse(variable %in% "total_deaths_rtgrowth", "Total Deaths", "New Deaths")]
+agg.deaths.state[, total_deaths_rtgrowth_prev1 := temp$total_deaths_rtgrowth[match(agg.deaths.state$date - 1, temp$date)]]
+agg.deaths.state[, total_deaths_rtgrowth_prev2 := temp$total_deaths_rtgrowth[match(agg.deaths.state$date - 2, temp$date)]]
+agg.deaths.state[, total_deaths_rtgrowth_rolling3 := (total_deaths_rtgrowth + total_deaths_rtgrowth_prev1 + total_deaths_rtgrowth_prev2)/3]
+
+# now make a 3-day rolling new avg
+agg.deaths.state[, new_deaths_rtgrowth_prev1 := temp$new_deaths_rtgrowth[match(agg.deaths.state$date - 1, temp$date)]]
+agg.deaths.state[, new_deaths_rtgrowth_prev2 := temp$new_deaths_rtgrowth[match(agg.deaths.state$date - 2, temp$date)]]
+agg.deaths.state[, new_deaths_rtgrowth_rolling3 := (new_deaths_rtgrowth + new_deaths_rtgrowth_prev1 + new_deaths_rtgrowth_prev2)/3]
+
+melt.use <- melt(agg.deaths.state[, c("date", "total_deaths_rtgrowth_rolling3", "new_deaths_rtgrowth_rolling3")], id.vars = "date")
+melt.use[, variable := ifelse(variable %in% "total_deaths_rtgrowth_rolling3", "Total Deaths", "New Deaths")]
 
 agg.deaths.growth.state.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = date, y = value, color = variable)) + 
   geom_line(aes(group = variable)) +
     labs(x = "Date",
-       y = "Rate of growth (rolling 3-day window)",
-       title = "Rolling 3-day rate of growth: Confirmed COVID deaths",
+       y = "Daily growth rate (rolling 3-day avg)",
+       title = "Daily growth rate (3-day rolling avg): Confirmed COVID deaths",
        subtitle = use.state,
        color = "Metric") +
   theme(plot.title = element_text(hjust = 0.5),
@@ -375,30 +475,41 @@ agg.deaths.growth.state.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = d
 agg.deaths.growth.state.plot
 ```
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 use.state <- "Tennessee"
 deaths.state <- state.raw[state %in% use.state]
 agg.deaths.state <- deaths.state[order(date),
                           .(total_deaths = sum(deaths, na.rm = T)),
                           by = "date"]
 
+# make single day total and new cash growth rates
 temp <- agg.deaths.state
-agg.deaths.state[, total_deaths_prev3 := temp$total_deaths[match(agg.deaths.state$date - 3, temp$date)]]
-agg.deaths.state[, total_deaths_rtgrowth := total_deaths/total_deaths_prev3 - 1]
-agg.deaths.state[, new_deaths_prev3 := total_deaths - total_deaths_prev3]
-
+agg.deaths.state[, total_deaths_prev := temp$total_deaths[match(agg.deaths.state$date - 1, temp$date)]]
+agg.deaths.state[, total_deaths_rtgrowth := total_deaths/total_deaths_prev - 1]
+agg.deaths.state[, new_deaths := total_deaths - total_deaths_prev]
 temp <- agg.deaths.state
-agg.deaths.state[, new_deaths_prev3_last := temp$new_deaths_prev3[match(agg.deaths.state$date - 1, temp$date)]]
-agg.deaths.state[, new_deaths_rtgrowth := new_deaths_prev3/new_deaths_prev3_last - 1]
+agg.deaths.state[, new_deaths_prev := temp$new_deaths[match(agg.deaths.state$date - 1, temp$date)]]
+agg.deaths.state[, new_deaths_rtgrowth := new_deaths/new_deaths_prev - 1]
 
-melt.use <- melt(agg.deaths.state[, c("date", "total_deaths_rtgrowth", "new_deaths_rtgrowth")], id.vars = "date")
-melt.use[, variable := ifelse(variable %in% "total_deaths_rtgrowth", "Total Deaths", "New Deaths")]
+# now make a 3-day rolling total avg
+temp <- agg.deaths.state
+agg.deaths.state[, total_deaths_rtgrowth_prev1 := temp$total_deaths_rtgrowth[match(agg.deaths.state$date - 1, temp$date)]]
+agg.deaths.state[, total_deaths_rtgrowth_prev2 := temp$total_deaths_rtgrowth[match(agg.deaths.state$date - 2, temp$date)]]
+agg.deaths.state[, total_deaths_rtgrowth_rolling3 := (total_deaths_rtgrowth + total_deaths_rtgrowth_prev1 + total_deaths_rtgrowth_prev2)/3]
+
+# now make a 3-day rolling new avg
+agg.deaths.state[, new_deaths_rtgrowth_prev1 := temp$new_deaths_rtgrowth[match(agg.deaths.state$date - 1, temp$date)]]
+agg.deaths.state[, new_deaths_rtgrowth_prev2 := temp$new_deaths_rtgrowth[match(agg.deaths.state$date - 2, temp$date)]]
+agg.deaths.state[, new_deaths_rtgrowth_rolling3 := (new_deaths_rtgrowth + new_deaths_rtgrowth_prev1 + new_deaths_rtgrowth_prev2)/3]
+
+melt.use <- melt(agg.deaths.state[, c("date", "total_deaths_rtgrowth_rolling3", "new_deaths_rtgrowth_rolling3")], id.vars = "date")
+melt.use[, variable := ifelse(variable %in% "total_deaths_rtgrowth_rolling3", "Total Deaths", "New Deaths")]
 
 agg.deaths.growth.state.plot <- ggplot(melt.use[date >= "2020-03-16"], aes(x = date, y = value, color = variable)) + 
   geom_line(aes(group = variable)) +
     labs(x = "Date",
-       y = "Rate of growth (rolling 3-day window)",
-       title = "Rolling 3-day rate of growth: Confirmed COVID deaths",
+       y = "Daily growth rate (rolling 3-day avg)",
+       title = "Daily growth rate (3-day rolling avg): Confirmed COVID deaths",
        subtitle = use.state,
        color = "Metric") +
   theme(plot.title = element_text(hjust = 0.5),
@@ -415,7 +526,7 @@ agg.deaths.growth.state.plot
 #### Total confirmed cases
 
 Table of total confirmed cases per million residents (all 50 states)
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 state.per.cap <- merge(state.raw, stay_dates, by = "state", all.x = T)
 state.per.cap[, casesPerMillion := as.integer(cases/population * 1000000)]
 date.cut <- max(state.per.cap$date)
@@ -425,7 +536,7 @@ state.per.cap.agg[, casesPerMillion := comma(casesPerMillion)]
 state.per.cap.agg
 ```
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 state.per.cap.agg[, row := .I]
 top.ten <- state.per.cap.agg[row < 11, "state"]
 state.per.cap.series <- state.per.cap[state %in% top.ten$state]
@@ -443,22 +554,22 @@ state.per.cap.plot
 
 #### New confirmed cases
 
-Table of new cases per million residents: rolling 3-day total (all 50 states)
-```{r message = F, warning = F}
+Table of new cases per million residents: rolling 3-day average (all 50 states)
+```{r echo = F, message = F, warning = F}
 state.per.cap <- merge(state.raw, stay_dates, by = "state", all.x = T)
 date.cut <- max(state.per.cap$date)
 date.min <- max(state.per.cap$date) - 3
 state.per.cap.agg <- state.per.cap[date == date.cut]
 temp <- state.per.cap[date == date.min]
 state.per.cap.agg[, casesPrev3 := temp$cases[match(state.per.cap.agg$state, temp$state)]]
-state.per.cap.agg[, newCasesPrev3 := (cases - casesPrev3)]
+state.per.cap.agg[, newCasesPrev3 := (cases - casesPrev3)/3]
 state.per.cap.agg[, casesNewPerMillion := as.integer(newCasesPrev3/population * 1000000)]
 state.per.cap.agg <- state.per.cap.agg[order(-casesNewPerMillion), c("state", "casesNewPerMillion")]
 state.per.cap.agg[, casesNewPerMillion := comma(casesNewPerMillion)]
 state.per.cap.agg
 ```
 
-```{r  echo = F, message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 state.per.cap.agg[, row := .I]
 top.ten <- state.per.cap.agg[row < 11, "state"]
 state.per.cap.series <- state.per.cap[state %in% top.ten$state]
@@ -466,13 +577,13 @@ temp <- state.per.cap.series[, c("state", "date", "cases")]
 setnames(temp, "cases", "casesPrev3")
 state.per.cap.series[, datePrev3 := date - 3]
 state.per.cap.series <- merge(state.per.cap.series, temp, all.x = T, by.x = c("state", "datePrev3"), by.y = c("state", "date"))
-state.per.cap.series[, newCasesPrev3 := (cases - casesPrev3)]
+state.per.cap.series[, newCasesPrev3 := (cases - casesPrev3)/3]
 state.per.cap.series[, casesNewPerMillion := as.integer(newCasesPrev3/population * 1000000)]
 state.per.cap.plot <- ggplot(state.per.cap.series[date >= "2020-03-10"], aes(x = date, y = casesNewPerMillion, colour = state)) +
   geom_line(aes(group = state)) +
     labs(x = "Date",
        y = "New confirmed COVID cases per million residents",
-       title = "New confirmed COVID cases per million resident (3-day rolling total)",
+       title = "New confirmed COVID cases per million resident (3-day rolling average)",
        subtitle = paste0("States with 10 highest counts as of ", format(date.cut, "%B %d, %Y"))) +
   theme(plot.title = element_text(hjust = 0.5),
         plot.subtitle = element_text(hjust = 0.5)) +
@@ -483,7 +594,7 @@ state.per.cap.plot
 #### Total deaths
 
 Table of total deaths per million residents (all 50 states)
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 state.per.cap <- merge(state.raw, stay_dates, by = "state", all.x = T)
 state.per.cap[, deathsPerMillion := as.integer(deaths/population * 1000000)]
 date.cut <- max(state.per.cap$date)
@@ -493,7 +604,7 @@ state.per.cap.agg[, deathsPerMillion := comma(deathsPerMillion)]
 state.per.cap.agg
 ```
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 state.per.cap.agg[, row := .I]
 top.ten <- state.per.cap.agg[row < 11, "state"]
 state.per.cap.series <- state.per.cap[state %in% top.ten$state]
@@ -511,22 +622,22 @@ state.per.cap.plot
 
 #### New deaths
 
-Table of new deaths per million residents: rolling 3-day total (all 50 states)
-```{r message = F, warning = F}
+Table of new deaths per million residents: rolling 3-day average (all 50 states)
+```{r echo = F, message = F, warning = F}
 state.per.cap <- merge(state.raw, stay_dates, by = "state", all.x = T)
 date.cut <- max(state.per.cap$date)
 date.min <- max(state.per.cap$date) - 3
 state.per.cap.agg <- state.per.cap[date == date.cut]
 temp <- state.per.cap[date == date.min]
 state.per.cap.agg[, deathsPrev3 := temp$deaths[match(state.per.cap.agg$state, temp$state)]]
-state.per.cap.agg[, newDeathsPrev3 := (deaths - deathsPrev3)]
+state.per.cap.agg[, newDeathsPrev3 := (deaths - deathsPrev3)/3]
 state.per.cap.agg[, deathsNewPerMillion := as.integer(newDeathsPrev3/population * 1000000)]
 state.per.cap.agg <- state.per.cap.agg[order(-deathsNewPerMillion), c("state", "deathsNewPerMillion")]
 state.per.cap.agg[, deathsNewPerMillion := comma(deathsNewPerMillion)]
 state.per.cap.agg
 ```
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 state.per.cap.agg[, row := .I]
 top.ten <- state.per.cap.agg[row < 11, "state"]
 state.per.cap.series <- state.per.cap[state %in% top.ten$state]
@@ -534,13 +645,13 @@ temp <- state.per.cap.series[, c("state", "date", "deaths")]
 setnames(temp, "deaths", "deathsPrev3")
 state.per.cap.series[, datePrev3 := date - 3]
 state.per.cap.series <- merge(state.per.cap.series, temp, all.x = T, by.x = c("state", "datePrev3"), by.y = c("state", "date"))
-state.per.cap.series[, newDeathsPrev3 := (deaths - deathsPrev3)]
+state.per.cap.series[, newDeathsPrev3 := (deaths - deathsPrev3)/3]
 state.per.cap.series[, deathsNewPerMillion := as.integer(newDeathsPrev3/population * 1000000)]
 state.per.cap.plot <- ggplot(state.per.cap.series[date >= "2020-03-10"], aes(x = date, y = deathsNewPerMillion, colour = state)) +
   geom_line(aes(group = state)) +
     labs(x = "Date",
        y = "New COVID-related deaths per million residents",
-       title = "New COVID-related deaths per million resident (3-day rolling total)",
+       title = "New COVID-related deaths per million resident (3-day rolling average)",
        subtitle = paste0("States with 10 highest counts as of ", format(date.cut, "%B %d, %Y"))) +
   theme(plot.title = element_text(hjust = 0.5),
         plot.subtitle = element_text(hjust = 0.5))
@@ -555,7 +666,9 @@ Table showing total cases per million and percentile for all US counties.
 Includes our counties and the top 5 in the US for perspective.
 ```{r  echo = F, message = F, warning = F}
 # merge county raw and county pop
-county.per.cap <- merge(county.raw, county_pop, all.x = T, by.x = c("county", "state"), by.y = c("CTYNAME", "STNAME"))
+county.use <- county.raw
+county.use[, county := gsub("(.*) City", "\\1", county)]
+county.per.cap <- merge(county.use, county_pop, all.x = T, by.x = c("county", "state"), by.y = c("CTYNAME", "STNAME"))
 county.per.cap[, casesPerMillion := round(cases/POPESTIMATE2019 * 1000000, 2)]
 date.cut <- max(county.per.cap$date)
 county.per.cap <- county.per.cap[date == date.cut]
@@ -572,7 +685,9 @@ county.per.cap[flgOurCounty == 1 | rawRanking < 6, -c("flgOurCounty")]
 
 Our county percentiles over time
 ```{r  echo = F, message = F, warning = F}
-county.per.cap <- merge(county.raw, county_pop, all.x = T, by.x = c("county", "state"), by.y = c("CTYNAME", "STNAME"))
+county.use <- county.raw
+county.use[, county := gsub("(.*) City", "\\1", county)]
+county.per.cap <- merge(county.use, county_pop, all.x = T, by.x = c("county", "state"), by.y = c("CTYNAME", "STNAME"))
 county.per.cap[, casesPerMillion := round(cases/POPESTIMATE2019 * 1000000, 2)]
 county.per.cap <- county.per.cap[order(fips, date),
                                  .(casesPerMillion = max(casesPerMillion)),
@@ -618,7 +733,9 @@ plot.county.per.cap
 Table showing total deaths per million and percentile for all US counties.
 Includes our counties and the top 5 in the US for perspective.
 ```{r  echo = F, message = F, warning = F}
-county.per.cap <- merge(county.raw, county_pop, all.x = T, by.x = c("county", "state"), by.y = c("CTYNAME", "STNAME"))
+county.use <- county.raw
+county.use[, county := gsub("(.*) City", "\\1", county)]
+county.per.cap <- merge(county.use, county_pop, all.x = T, by.x = c("county", "state"), by.y = c("CTYNAME", "STNAME"))
 county.per.cap[, deathsPerMillion := round(deaths/POPESTIMATE2019 * 1000000, 2)]
 date.cut <- max(county.per.cap$date)
 county.per.cap <- county.per.cap[date == date.cut]
@@ -635,7 +752,9 @@ county.per.cap[flgOurCounty == 1 | rawRanking < 6, -c("flgOurCounty")]
 
 Our county percentiles over time
 ```{r  echo = F, message = F, warning = F}
-county.per.cap <- merge(county.raw, county_pop, all.x = T, by.x = c("county", "state"), by.y = c("CTYNAME", "STNAME"))
+county.use <- county.raw
+county.use[, county := gsub("(.*) City", "\\1", county)]
+county.per.cap <- merge(county.use, county_pop, all.x = T, by.x = c("county", "state"), by.y = c("CTYNAME", "STNAME"))
 county.per.cap[, deathsPerMillion := round(deaths/POPESTIMATE2019 * 1000000, 2)]
 county.per.cap <- county.per.cap[order(fips, date),
                                  .(deathsPerMillion = max(deathsPerMillion)),
@@ -682,7 +801,7 @@ plot.county.per.cap
 
 #### U.S.
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 agg.cases.US <- state.raw[order(date),
                           .(total_cases = sum(cases, na.rm = T)),
                           by = "date"]
@@ -700,7 +819,7 @@ agg.cases.US.plot
 
 #### Our states
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 # adjust state name to flow through rest of code (use capitalized full state name)
 use.state <- "Washington"
 cases.state <- state.raw[state %in% use.state]
@@ -719,7 +838,7 @@ agg.cases.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"], aes(x = da
 agg.cases.state.plot
 ```
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 # adjust state name to flow through rest of code (use capitalized full state name)
 use.state <- "California"
 cases.state <- state.raw[state %in% use.state]
@@ -738,7 +857,7 @@ agg.cases.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"], aes(x = da
 agg.cases.state.plot
 ```
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 # adjust state name to flow through rest of code (use capitalized full state name)
 use.state <- "South Carolina"
 cases.state <- state.raw[state %in% use.state]
@@ -757,7 +876,7 @@ agg.cases.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"], aes(x = da
 agg.cases.state.plot
 ```
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 # adjust state name to flow through rest of code (use capitalized full state name)
 use.state <- "Tennessee"
 cases.state <- state.raw[state %in% use.state]
@@ -778,7 +897,7 @@ agg.cases.state.plot
 
 #### Our counties
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 # adjust state and county name to flow through rest of code (use capitalized full state name)
 use.state <- "Washington"
 use.county <- "Pierce"
@@ -798,7 +917,7 @@ agg.cases.county.plot <- ggplot(agg.cases.county[date >= "2020-03-01"], aes(x = 
 agg.cases.county.plot
 ```
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 # adjust state and county name to flow through rest of code (use capitalized full state name)
 use.state <- "California"
 use.county <- "Orange"
@@ -818,7 +937,7 @@ agg.cases.county.plot <- ggplot(agg.cases.county[date >= "2020-03-01"], aes(x = 
 agg.cases.county.plot
 ```
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 # adjust state and county name to flow through rest of code (use capitalized full state name)
 use.state <- "South Carolina"
 use.county <- "Richland"
@@ -838,7 +957,7 @@ agg.cases.county.plot <- ggplot(agg.cases.county[date >= "2020-03-01"], aes(x = 
 agg.cases.county.plot
 ```
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 # adjust state and county name to flow through rest of code (use capitalized full state name)
 use.state <- "South Carolina"
 use.county <- "York"
@@ -858,7 +977,7 @@ agg.cases.county.plot <- ggplot(agg.cases.county[date >= "2020-03-01"], aes(x = 
 agg.cases.county.plot
 ```
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 # adjust state and county name to flow through rest of code (use capitalized full state name)
 use.state <- "Tennessee"
 use.county <- "Davidson"
@@ -882,7 +1001,7 @@ agg.cases.county.plot
 
 #### U.S.
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 agg.cases.US <- state.raw[order(date),
                           .(total_cases = sum(cases, na.rm = T)),
                           by = "date"]
@@ -903,7 +1022,7 @@ agg.new.cases.US.plot
 
 #### Our states
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 use.state <- "Washington"
 cases.state <- state.raw[state %in% use.state]
 agg.cases.state <- cases.state[order(date),
@@ -924,7 +1043,7 @@ agg.new.cases.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"], aes(x 
 agg.new.cases.state.plot
 ```
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 use.state <- "California"
 cases.state <- state.raw[state %in% use.state]
 agg.cases.state <- cases.state[order(date),
@@ -945,7 +1064,7 @@ agg.new.cases.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"], aes(x 
 agg.new.cases.state.plot
 ```
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 use.state <- "South Carolina"
 cases.state <- state.raw[state %in% use.state]
 agg.cases.state <- cases.state[order(date),
@@ -966,7 +1085,7 @@ agg.new.cases.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"], aes(x 
 agg.new.cases.state.plot
 ```
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 use.state <- "Tennessee"
 cases.state <- state.raw[state %in% use.state]
 agg.cases.state <- cases.state[order(date),
@@ -989,7 +1108,7 @@ agg.new.cases.state.plot
 
 #### Our counties
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 use.state <- "Washington"
 use.county <- "Pierce"
 cases.county <- county.raw[state %in% use.state & county %in% use.county]
@@ -1011,7 +1130,7 @@ agg.new.cases.county.plot <- ggplot(agg.cases.county[date >= "2020-03-01"], aes(
 agg.new.cases.county.plot
 ```
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 use.state <- "California"
 use.county <- "Orange"
 cases.county <- county.raw[state %in% use.state & county %in% use.county]
@@ -1033,7 +1152,7 @@ agg.new.cases.county.plot <- ggplot(agg.cases.county[date >= "2020-03-01"], aes(
 agg.new.cases.county.plot
 ```
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 use.state <- "South Carolina"
 use.county <- "Richland"
 cases.county <- county.raw[state %in% use.state & county %in% use.county]
@@ -1077,7 +1196,7 @@ agg.new.cases.county.plot <- ggplot(agg.cases.county[date >= "2020-03-01"], aes(
 agg.new.cases.county.plot
 ```
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 use.state <- "Tennessee"
 use.county <- "Davidson"
 cases.county <- county.raw[state %in% use.state & county %in% use.county]
@@ -1103,7 +1222,7 @@ agg.new.cases.county.plot
 
 #### U.S.
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 agg.deaths.US <- state.raw[order(date),
                           .(total_deaths = sum(deaths, na.rm = T)),
                           by = "date"]
@@ -1121,7 +1240,7 @@ agg.deaths.US.plot
 
 #### Our states
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 # adjust state name to flow through rest of code (use capitalized full state name)
 use.state <- "Washington"
 deaths.state <- state.raw[state %in% use.state]
@@ -1139,7 +1258,7 @@ agg.deaths.state.plot <- ggplot(agg.deaths.state[date >= "2020-03-01"], aes(x = 
 agg.deaths.state.plot
 ```
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 # adjust state name to flow through rest of code (use capitalized full state name)
 use.state <- "California"
 deaths.state <- state.raw[state %in% use.state]
@@ -1157,7 +1276,7 @@ agg.deaths.state.plot <- ggplot(agg.deaths.state[date >= "2020-03-01"], aes(x = 
 agg.deaths.state.plot
 ```
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 # adjust state name to flow through rest of code (use capitalized full state name)
 use.state <- "South Carolina"
 deaths.state <- state.raw[state %in% use.state]
@@ -1175,7 +1294,7 @@ agg.deaths.state.plot <- ggplot(agg.deaths.state[date >= "2020-03-01"], aes(x = 
 agg.deaths.state.plot
 ```
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 # adjust state name to flow through rest of code (use capitalized full state name)
 use.state <- "Tennessee"
 deaths.state <- state.raw[state %in% use.state]
@@ -1195,7 +1314,7 @@ agg.deaths.state.plot
 
 #### Our counties
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 # adjust state and county name to flow through rest of code (use capitalized full state name)
 use.state <- "Washington"
 use.county <- "Pierce"
@@ -1214,7 +1333,7 @@ agg.deaths.county.plot <- ggplot(agg.deaths.county[date >= "2020-03-01"], aes(x 
 agg.deaths.county.plot
 ```
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 # adjust state and county name to flow through rest of code (use capitalized full state name)
 use.state <- "California"
 use.county <- "Orange"
@@ -1233,7 +1352,7 @@ agg.deaths.county.plot <- ggplot(agg.deaths.county[date >= "2020-03-01"], aes(x 
 agg.deaths.county.plot
 ```
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 # adjust state and county name to flow through rest of code (use capitalized full state name)
 use.state <- "South Carolina"
 use.county <- "Richland"
@@ -1252,7 +1371,7 @@ agg.deaths.county.plot <- ggplot(agg.deaths.county[date >= "2020-03-01"], aes(x 
 agg.deaths.county.plot
 ```
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 # adjust state and county name to flow through rest of code (use capitalized full state name)
 use.state <- "South Carolina"
 use.county <- "York"
@@ -1271,7 +1390,7 @@ agg.deaths.county.plot <- ggplot(agg.deaths.county[date >= "2020-03-01"], aes(x 
 agg.deaths.county.plot
 ```
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 # adjust state and county name to flow through rest of code (use capitalized full state name)
 use.state <- "Tennessee"
 use.county <- "Davidson"
@@ -1294,7 +1413,7 @@ agg.deaths.county.plot
 
 #### U.S.
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 agg.deaths.US <- state.raw[order(date),
                           .(total_deaths = sum(deaths, na.rm = T)),
                           by = "date"]
@@ -1315,7 +1434,7 @@ agg.new.deaths.US.plot
 
 #### Our states
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 use.state <- "Washington"
 deaths.state <- state.raw[state %in% use.state]
 agg.deaths.state <- deaths.state[order(date),
@@ -1335,7 +1454,7 @@ agg.new.deaths.state.plot <- ggplot(agg.deaths.state[date >= "2020-03-01"], aes(
 agg.new.deaths.state.plot
 ```
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 use.state <- "California"
 deaths.state <- state.raw[state %in% use.state]
 agg.deaths.state <- deaths.state[order(date),
@@ -1355,7 +1474,7 @@ agg.new.deaths.state.plot <- ggplot(agg.deaths.state[date >= "2020-03-01"], aes(
 agg.new.deaths.state.plot
 ```
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 use.state <- "South Carolina"
 deaths.state <- state.raw[state %in% use.state]
 agg.deaths.state <- deaths.state[order(date),
@@ -1375,7 +1494,7 @@ agg.new.deaths.state.plot <- ggplot(agg.deaths.state[date >= "2020-03-01"], aes(
 agg.new.deaths.state.plot
 ```
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 use.state <- "Tennessee"
 deaths.state <- state.raw[state %in% use.state]
 agg.deaths.state <- deaths.state[order(date),
@@ -1397,7 +1516,7 @@ agg.new.deaths.state.plot
 
 #### Our counties
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 use.state <- "Washington"
 use.county <- "Pierce"
 deaths.county <- county.raw[state %in% use.state & county %in% use.county]
@@ -1418,7 +1537,7 @@ agg.new.deaths.county.plot <- ggplot(agg.deaths.county[date >= "2020-03-01"], ae
 agg.new.deaths.county.plot
 ```
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 use.state <- "California"
 use.county <- "Orange"
 deaths.county <- county.raw[state %in% use.state & county %in% use.county]
@@ -1439,7 +1558,7 @@ agg.new.deaths.county.plot <- ggplot(agg.deaths.county[date >= "2020-03-01"], ae
 agg.new.deaths.county.plot
 ```
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 use.state <- "South Carolina"
 use.county <- "Richland"
 deaths.county <- county.raw[state %in% use.state & county %in% use.county]
@@ -1460,7 +1579,7 @@ agg.new.deaths.county.plot <- ggplot(agg.deaths.county[date >= "2020-03-01"], ae
 agg.new.deaths.county.plot
 ```
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 use.state <- "South Carolina"
 use.county <- "York"
 deaths.county <- county.raw[state %in% use.state & county %in% use.county]
@@ -1481,7 +1600,7 @@ agg.new.deaths.county.plot <- ggplot(agg.deaths.county[date >= "2020-03-01"], ae
 agg.new.deaths.county.plot
 ```
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 use.state <- "Tennessee"
 use.county <- "Davidson"
 deaths.county <- county.raw[state %in% use.state & county %in% use.county]
@@ -1503,14 +1622,14 @@ agg.new.deaths.county.plot
 ```
 
 ## Stay-at-home comparisons
-* The section is a work in progress -- I'll probably change and add plots over the coming days.
+* The section is a work in progress -- I'll continue to update over the coming days.
 * I'm trying to see what effect stay-at-home orders have on spread. It's inherentely messy because some states have localized orders but not orders for their full state and because states implemented the orders at different times.
-* The current plot shows the rolling 3-day average of new cases per million residents, averaged across 2 groups of states -- those with a state-wide stay-at-home order in effect and those without. The size of the dots reflect the number of states in each group for each given day (so the dots are getting bigger for the group with orders over time, as more states implement those orders).
-* So far, this view doesn't show if these orders are "working" or not. Instead, the biggest takeaway from the current plot is that the states that implemented orders are reacting to having worse spread, which is why the case rate is so much higher at the start for them. As a state decides it has a problem and implements an order, it joins the grouping of states with orders and drives the rate up for that group.
-* Over time (if the policies work), what we'd expect is that the line for the group with orders flattens a bit, but we'll see. It also may become moot if all states issue orders.
-* The next plot I want to add will show rate of spread based on how long an order has been in effect, but still thinking about how to do this. Mostly, I'm trying to decide what the right baseline is to compare against.
+  * The first plot shows a rolling 3-day average of new cases per million residents, averaged across 2 groups of states -- those with a state-wide stay-at-home order in effect and those without. The size of the dots reflect the number of states in each group for each given day (so the dots are getting bigger for the group with orders over time, as more states implement those orders).
+    * So far, this view doesn't show if these orders are "working" or not. Instead, the biggest takeaway from the current plot is that the states that implemented orders are reacting to having worse spread, which is why the case rate is so much higher at the start for them. As a state decides it has a problem and implements an order, it joins the grouping of states with orders and drives the rate up for that group.
+    * Over time (if the policies work), what we'd expect is that the line for the group with orders flattens a bit, but we'll see. It also may become moot if all states issue orders.
+  * The second plot is new and is attempting to track the progress normalized for how long each state has hade the order. It shows the average of the ratio for each state of the new cases for any given day to the number of new cases on the day the order was enacted. If the orders are working, over time this line should come back down...but it isn't there yet.
 
-```{r message = F, warning = F}
+```{r echo = F, message = F, warning = F}
 state.dt <- state.raw
 state.dt[, stay_date := stay_dates$start_date[match(state.raw$state, stay_dates$state)]]
 state.dt[, population := stay_dates$population[match(state.raw$state, stay_dates$state)]]
@@ -1536,10 +1655,35 @@ state.agg.comp.plot <- ggplot(state.agg.comp, aes(x = date, y = avgNewCases, col
     labs(x = "Date",
        y = "New confirmed COVID cases per million residents",
        title = "New COVID cases vs.stay-at-home order",
-       subtitle = "Average of 3-day rolling totals per million residents",
+       subtitle = "Rolling 3-day average of new cases per million residents",
        size = "Count of states",
        colour = "Stay-at-home order") +
   theme(plot.title = element_text(hjust = 0.5),
         plot.subtitle = element_text(hjust = 0.5))
 state.agg.comp.plot
 ```
+
+```{r echo = F, message = F, warning = F}
+state.dt[, daysFromStayOrder := as.integer(date - stay_date)]
+key.data <- state.dt[daysFromStayOrder == 0]
+state.dt[, baselineNewCases := key.data$casesNewPerMillion[match(state.dt$state, key.data$state)]]
+state.dt[, ratioToBaseline := casesNewPerMillion/baselineNewCases]
+state.stay.comp <- state.dt[!is.na(stay_date) & daysFromStayOrder >= -7 & !state %in% "Puerto Rico"]
+state.stay.comp <- state.stay.comp[!is.na(ratioToBaseline),
+                                   .(avgBaselineRate = mean(ratioToBaseline, na.rm = T),
+                                     cts = .N),
+                                   by = c("daysFromStayOrder")]
+state.stay.comp.plot <- ggplot(state.stay.comp, aes(x = daysFromStayOrder, y = avgBaselineRate)) +
+  geom_line() +
+  geom_point(aes(size = cts)) +
+    labs(x = "Days from stay-at-home order",
+       y = "Ratio of new cases to day order was issued",
+       title = "New COVID cases by stay-at-home order timing",
+       subtitle = "Comparing new cases to day when order was issued",
+       size = "Count of states") +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1))
+state.stay.comp.plot
+```
+
