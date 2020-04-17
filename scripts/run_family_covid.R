@@ -19,15 +19,17 @@ rmarkdown::render(input = "~/covid19/notebooks/covid_plots_fam.Rmd",
                   output_dir = "~/covid19/outputs/")
 
 # send email with attachments
-subject.text <- paste0("Automated COVID report for ", today)
+# subject.text <- paste0("Automated COVID report for ", today)
+subject.text <- paste0("Automated COVID report for ", today, " with some cool updates")
 
-body.text <- paste0("This is an automated email from Leland. Attached is an html file with updated COVID data for our locations, with data included through ",
-                    yesterday, ". To view it, download and then click to open. It should open in your browser. If not, right-click it once downloaded and choose to open with ",
-                    "your browser of choice. If you have feedback or something else that you'd like included, let me know!")
 
-# body.text <- paste0("Attached is an html file with updated COVID data for our locations, with data included through ",
-#                     yesterday, ". Sorry, it's late today because I made some changes -- check them out! To view it, download and then click to open. It should open in your browser. If not, right-click it once downloaded and choose to open with ",
-#                     "your browser of choice. Schedule should return to normal tomorrow, with the report going out midday. If you have feedback or something else that you'd like included, let me know!")
+# body.text <- paste0("This is an automated email from Leland. Attached is an html file with updated COVID data for our locations, with data included through ",
+#                     yesterday, ". To view it, download and then click to open. It should open in your browser. If not, right-click it once downloaded and choose to open with ",
+#                     "your browser of choice. Make sure to actually download the file to get full functionality, instead of just previewing it in your email. If you have feedback or something else that you'd like included, let me know!")
+
+body.text <- paste0("Attached is an html file with updated COVID data for our locations, with data included through ",
+                    yesterday, ". I made some cool changes again -- check them out! To view it, download and then click to open. It should open in your browser. If not, right-click it once downloaded and choose to open with ",
+                    "your browser of choice. Make sure to actually download the file to get full functionality, instead of just previewing it in your email. If you have feedback or something else that you'd like included, let me know!")
 
 recipient.emails <- c("leland@ensemblex.com",
                       "alyssa.c.burns@gmail.com",
@@ -40,7 +42,6 @@ recipient.emails <- c("leland@ensemblex.com",
 
 send.mail(from = "leland.b.burns@gmail.com",
           to = recipient.emails,
-          subject = subject.text,
           body = body.text,
           smtp = list(host.name = "smtp.gmail.com",
                       port = 465,
