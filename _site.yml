@@ -5,4 +5,4 @@ navbar:
     - text: "Home"
       href: index.html
     - text: "Background"
-      href: outputs/covid_plots.fam.html
+      href: outputs/covid_plots_fam.html
