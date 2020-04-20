@@ -1132,8 +1132,10 @@ plot.county.per.cap
 * This section shows the raw counts over time for the U.S., our states, and our counties for four categories:
   * Total confirmed cases: This is the cumulative total of cases reported.
   * New confirmed cases: This is the number of new cases reported on each respective date.
+    * For the U.S. and states, a trendline shows the rolling 7-day average of new cases, to help better visualize the peak.
   * Total deaths: This is the cumulative total of deaths reported.
   * New deaths: This is the number of new deaths reported on each respective date.
+      * For the U.S. and states, a trendline shows the rolling 7-day average of new deaths, to help better visualize the peak.
 
 ### Total confirmed cases {.tabset .tabset-fade}
 
@@ -1406,8 +1408,14 @@ agg.cases.US <- state.raw[order(date),
 temp <- agg.cases.US
 agg.cases.US[, total_cases_prev := temp$total_cases[match(agg.cases.US$date - 1, temp$date)]]
 agg.cases.US[, total_new_cases := total_cases - total_cases_prev]
-agg.new.cases.US.plot <- ggplot(agg.cases.US[date >= "2020-03-01"], aes(x = date, y = total_new_cases)) + 
-  geom_bar(stat = "identity") +
+agg.cases.US[, total_cases_prev7 := temp$total_cases[match(agg.cases.US$date - 7, temp$date)]]
+agg.cases.US[, avg_new_cases7 := (total_cases - total_cases_prev7)/7]
+
+agg.new.cases.US.plot <- ggplot(agg.cases.US[date >= "2020-03-01"]) + 
+  geom_bar(stat = "identity", aes(x = date, y = total_new_cases, fill = "Daily figures")) +
+  scale_fill_manual("", values=c("Daily figures" = "#999999")) + 
+  geom_line(aes(x = date, y = avg_new_cases7, color = "7-day average")) +
+  scale_colour_manual("", values=c("7-day average" = "#000000")) + 
     labs(x = "Date",
        y = "Confirmed new COVID cases",
        title = "Confirmed new COVID cases by day",
@@ -1419,7 +1427,8 @@ agg.new.cases.US.plot <- ggplot(agg.cases.US[date >= "2020-03-01"], aes(x = date
         panel.background = element_blank(),
         axis.ticks = element_blank(),
         axis.line = element_line(colour = "black"),
-        legend.key = element_blank()) +
+        legend.key = element_blank(),
+        legend.position = "top") +
   scale_y_continuous(labels = comma)
 agg.new.cases.US.plot
 ```
@@ -1435,8 +1444,14 @@ agg.cases.state <- cases.state[order(date),
 temp <- agg.cases.state
 agg.cases.state[, total_cases_prev := temp$total_cases[match(agg.cases.state$date - 1, temp$date)]]
 agg.cases.state[, total_new_cases := total_cases - total_cases_prev]
-agg.new.cases.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"], aes(x = date, y = total_new_cases)) + 
-  geom_bar(stat = "identity") +
+agg.cases.state[, total_cases_prev7 := temp$total_cases[match(agg.cases.state$date - 7, temp$date)]]
+agg.cases.state[, avg_new_cases7 := (total_cases - total_cases_prev7)/7]
+
+agg.new.cases.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"]) + 
+  geom_bar(stat = "identity", aes(x = date, y = total_new_cases, fill = "Daily figures")) +
+  scale_fill_manual("", values=c("Daily figures" = "#999999")) + 
+  geom_line(aes(x = date, y = avg_new_cases7, color = "7-day average")) +
+  scale_colour_manual("", values=c("7-day average" = "#000000")) + 
     labs(x = "Date",
        y = "Confirmed new COVID cases",
        title = "Confirmed new COVID cases by day",
@@ -1448,7 +1463,8 @@ agg.new.cases.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"], aes(x 
         panel.background = element_blank(),
         axis.ticks = element_blank(),
         axis.line = element_line(colour = "black"),
-        legend.key = element_blank()) +
+        legend.key = element_blank(),
+        legend.position = "top") +
   scale_y_continuous(labels = comma)
 agg.new.cases.state.plot
 ```
@@ -1462,8 +1478,14 @@ agg.cases.state <- cases.state[order(date),
 temp <- agg.cases.state
 agg.cases.state[, total_cases_prev := temp$total_cases[match(agg.cases.state$date - 1, temp$date)]]
 agg.cases.state[, total_new_cases := total_cases - total_cases_prev]
-agg.new.cases.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"], aes(x = date, y = total_new_cases)) + 
-  geom_bar(stat = "identity") +
+agg.cases.state[, total_cases_prev7 := temp$total_cases[match(agg.cases.state$date - 7, temp$date)]]
+agg.cases.state[, avg_new_cases7 := (total_cases - total_cases_prev7)/7]
+
+agg.new.cases.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"]) + 
+  geom_bar(stat = "identity", aes(x = date, y = total_new_cases, fill = "Daily figures")) +
+  scale_fill_manual("", values=c("Daily figures" = "#999999")) + 
+  geom_line(aes(x = date, y = avg_new_cases7, color = "7-day average")) +
+  scale_colour_manual("", values=c("7-day average" = "#000000")) + 
     labs(x = "Date",
        y = "Confirmed new COVID cases",
        title = "Confirmed new COVID cases by day",
@@ -1475,7 +1497,8 @@ agg.new.cases.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"], aes(x 
         panel.background = element_blank(),
         axis.ticks = element_blank(),
         axis.line = element_line(colour = "black"),
-        legend.key = element_blank()) +
+        legend.key = element_blank(),
+        legend.position = "top") +
   scale_y_continuous(labels = comma)
 agg.new.cases.state.plot
 ```
@@ -1489,8 +1512,14 @@ agg.cases.state <- cases.state[order(date),
 temp <- agg.cases.state
 agg.cases.state[, total_cases_prev := temp$total_cases[match(agg.cases.state$date - 1, temp$date)]]
 agg.cases.state[, total_new_cases := total_cases - total_cases_prev]
-agg.new.cases.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"], aes(x = date, y = total_new_cases)) + 
-  geom_bar(stat = "identity") +
+agg.cases.state[, total_cases_prev7 := temp$total_cases[match(agg.cases.state$date - 7, temp$date)]]
+agg.cases.state[, avg_new_cases7 := (total_cases - total_cases_prev7)/7]
+
+agg.new.cases.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"]) + 
+  geom_bar(stat = "identity", aes(x = date, y = total_new_cases, fill = "Daily figures")) +
+  scale_fill_manual("", values=c("Daily figures" = "#999999")) + 
+  geom_line(aes(x = date, y = avg_new_cases7, color = "7-day average")) +
+  scale_colour_manual("", values=c("7-day average" = "#000000")) + 
     labs(x = "Date",
        y = "Confirmed new COVID cases",
        title = "Confirmed new COVID cases by day",
@@ -1502,7 +1531,8 @@ agg.new.cases.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"], aes(x 
         panel.background = element_blank(),
         axis.ticks = element_blank(),
         axis.line = element_line(colour = "black"),
-        legend.key = element_blank()) +
+        legend.key = element_blank(),
+        legend.position = "top") +
   scale_y_continuous(labels = comma)
 agg.new.cases.state.plot
 ```
@@ -1516,8 +1546,14 @@ agg.cases.state <- cases.state[order(date),
 temp <- agg.cases.state
 agg.cases.state[, total_cases_prev := temp$total_cases[match(agg.cases.state$date - 1, temp$date)]]
 agg.cases.state[, total_new_cases := total_cases - total_cases_prev]
-agg.new.cases.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"], aes(x = date, y = total_new_cases)) + 
-  geom_bar(stat = "identity") +
+agg.cases.state[, total_cases_prev7 := temp$total_cases[match(agg.cases.state$date - 7, temp$date)]]
+agg.cases.state[, avg_new_cases7 := (total_cases - total_cases_prev7)/7]
+
+agg.new.cases.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"]) + 
+  geom_bar(stat = "identity", aes(x = date, y = total_new_cases, fill = "Daily figures")) +
+  scale_fill_manual("", values=c("Daily figures" = "#999999")) + 
+  geom_line(aes(x = date, y = avg_new_cases7, color = "7-day average")) +
+  scale_colour_manual("", values=c("7-day average" = "#000000")) + 
     labs(x = "Date",
        y = "Confirmed new COVID cases",
        title = "Confirmed new COVID cases by day",
@@ -1529,7 +1565,8 @@ agg.new.cases.state.plot <- ggplot(agg.cases.state[date >= "2020-03-01"], aes(x 
         panel.background = element_blank(),
         axis.ticks = element_blank(),
         axis.line = element_line(colour = "black"),
-        legend.key = element_blank()) +
+        legend.key = element_blank(),
+        legend.position = "top") +
   scale_y_continuous(labels = comma)
 agg.new.cases.state.plot
 ```
@@ -1938,8 +1975,14 @@ agg.deaths.US <- state.raw[order(date),
 temp <- agg.deaths.US
 agg.deaths.US[, total_deaths_prev := temp$total_deaths[match(agg.deaths.US$date - 1, temp$date)]]
 agg.deaths.US[, total_new_deaths := total_deaths - total_deaths_prev]
-agg.new.deaths.US.plot <- ggplot(agg.deaths.US[date >= "2020-03-01"], aes(x = date, y = total_new_deaths)) + 
-  geom_bar(stat = "identity") +
+agg.deaths.US[, total_deaths_prev7 := temp$total_deaths[match(agg.deaths.US$date - 7, temp$date)]]
+agg.deaths.US[, avg_new_deaths7 := (total_deaths - total_deaths_prev7)/7]
+
+agg.new.deaths.US.plot <- ggplot(agg.deaths.US[date >= "2020-03-01"]) + 
+  geom_bar(stat = "identity", aes(x = date, y = total_new_deaths, fill = "Daily figures")) +
+  scale_fill_manual("", values=c("Daily figures" = "#999999")) + 
+  geom_line(aes(x = date, y = avg_new_deaths7, color = "7-day average")) +
+  scale_colour_manual("", values=c("7-day average" = "#000000")) + 
     labs(x = "Date",
        y = "New COVID-related deaths",
        title = "New COVID-related deaths by day",
@@ -1951,7 +1994,8 @@ agg.new.deaths.US.plot <- ggplot(agg.deaths.US[date >= "2020-03-01"], aes(x = da
         panel.background = element_blank(),
         axis.ticks = element_blank(),
         axis.line = element_line(colour = "black"),
-        legend.key = element_blank()) +
+        legend.key = element_blank(),
+        legend.position = "top") +
   scale_y_continuous(labels = comma)
 agg.new.deaths.US.plot
 ```
@@ -1967,8 +2011,14 @@ agg.deaths.state <- deaths.state[order(date),
 temp <- agg.deaths.state
 agg.deaths.state[, total_deaths_prev := temp$total_deaths[match(agg.deaths.state$date - 1, temp$date)]]
 agg.deaths.state[, total_new_deaths := total_deaths - total_deaths_prev]
+agg.deaths.state[, total_deaths_prev7 := temp$total_deaths[match(agg.deaths.state$date - 7, temp$date)]]
+agg.deaths.state[, avg_new_deaths7 := (total_deaths - total_deaths_prev7)/7]
+
 agg.new.deaths.state.plot <- ggplot(agg.deaths.state[date >= "2020-03-01"], aes(x = date, y = total_new_deaths)) + 
-  geom_bar(stat = "identity") +
+  geom_bar(stat = "identity", aes(x = date, y = total_new_deaths, fill = "Daily figures")) +
+  scale_fill_manual("", values=c("Daily figures" = "#999999")) + 
+  geom_line(aes(x = date, y = avg_new_deaths7, color = "7-day average")) +
+  scale_colour_manual("", values=c("7-day average" = "#000000")) + 
     labs(x = "Date",
        y = "New COVID-related deaths",
        title = "New COVID-related deaths by day",
@@ -1980,7 +2030,8 @@ agg.new.deaths.state.plot <- ggplot(agg.deaths.state[date >= "2020-03-01"], aes(
         panel.background = element_blank(),
         axis.ticks = element_blank(),
         axis.line = element_line(colour = "black"),
-        legend.key = element_blank())
+        legend.key = element_blank(),
+        legend.position = "top")
 agg.new.deaths.state.plot
 ```
 
@@ -1993,8 +2044,14 @@ agg.deaths.state <- deaths.state[order(date),
 temp <- agg.deaths.state
 agg.deaths.state[, total_deaths_prev := temp$total_deaths[match(agg.deaths.state$date - 1, temp$date)]]
 agg.deaths.state[, total_new_deaths := total_deaths - total_deaths_prev]
+agg.deaths.state[, total_deaths_prev7 := temp$total_deaths[match(agg.deaths.state$date - 7, temp$date)]]
+agg.deaths.state[, avg_new_deaths7 := (total_deaths - total_deaths_prev7)/7]
+
 agg.new.deaths.state.plot <- ggplot(agg.deaths.state[date >= "2020-03-01"], aes(x = date, y = total_new_deaths)) + 
-  geom_bar(stat = "identity") +
+  geom_bar(stat = "identity", aes(x = date, y = total_new_deaths, fill = "Daily figures")) +
+  scale_fill_manual("", values=c("Daily figures" = "#999999")) + 
+  geom_line(aes(x = date, y = avg_new_deaths7, color = "7-day average")) +
+  scale_colour_manual("", values=c("7-day average" = "#000000")) + 
     labs(x = "Date",
        y = "New COVID-related deaths",
        title = "New COVID-related deaths by day",
@@ -2006,7 +2063,8 @@ agg.new.deaths.state.plot <- ggplot(agg.deaths.state[date >= "2020-03-01"], aes(
         panel.background = element_blank(),
         axis.ticks = element_blank(),
         axis.line = element_line(colour = "black"),
-        legend.key = element_blank())
+        legend.key = element_blank(),
+        legend.position = "top")
 agg.new.deaths.state.plot
 ```
 
@@ -2019,8 +2077,14 @@ agg.deaths.state <- deaths.state[order(date),
 temp <- agg.deaths.state
 agg.deaths.state[, total_deaths_prev := temp$total_deaths[match(agg.deaths.state$date - 1, temp$date)]]
 agg.deaths.state[, total_new_deaths := total_deaths - total_deaths_prev]
+agg.deaths.state[, total_deaths_prev7 := temp$total_deaths[match(agg.deaths.state$date - 7, temp$date)]]
+agg.deaths.state[, avg_new_deaths7 := (total_deaths - total_deaths_prev7)/7]
+
 agg.new.deaths.state.plot <- ggplot(agg.deaths.state[date >= "2020-03-01"], aes(x = date, y = total_new_deaths)) + 
-  geom_bar(stat = "identity") +
+  geom_bar(stat = "identity", aes(x = date, y = total_new_deaths, fill = "Daily figures")) +
+  scale_fill_manual("", values=c("Daily figures" = "#999999")) + 
+  geom_line(aes(x = date, y = avg_new_deaths7, color = "7-day average")) +
+  scale_colour_manual("", values=c("7-day average" = "#000000")) + 
     labs(x = "Date",
        y = "New COVID-related deaths",
        title = "New COVID-related deaths by day",
@@ -2032,7 +2096,8 @@ agg.new.deaths.state.plot <- ggplot(agg.deaths.state[date >= "2020-03-01"], aes(
         panel.background = element_blank(),
         axis.ticks = element_blank(),
         axis.line = element_line(colour = "black"),
-        legend.key = element_blank())
+        legend.key = element_blank(),
+        legend.position = "top")
 agg.new.deaths.state.plot
 ```
 
@@ -2045,8 +2110,14 @@ agg.deaths.state <- deaths.state[order(date),
 temp <- agg.deaths.state
 agg.deaths.state[, total_deaths_prev := temp$total_deaths[match(agg.deaths.state$date - 1, temp$date)]]
 agg.deaths.state[, total_new_deaths := total_deaths - total_deaths_prev]
+agg.deaths.state[, total_deaths_prev7 := temp$total_deaths[match(agg.deaths.state$date - 7, temp$date)]]
+agg.deaths.state[, avg_new_deaths7 := (total_deaths - total_deaths_prev7)/7]
+
 agg.new.deaths.state.plot <- ggplot(agg.deaths.state[date >= "2020-03-01"], aes(x = date, y = total_new_deaths)) + 
-  geom_bar(stat = "identity") +
+  geom_bar(stat = "identity", aes(x = date, y = total_new_deaths, fill = "Daily figures")) +
+  scale_fill_manual("", values=c("Daily figures" = "#999999")) + 
+  geom_line(aes(x = date, y = avg_new_deaths7, color = "7-day average")) +
+  scale_colour_manual("", values=c("7-day average" = "#000000")) + 
     labs(x = "Date",
        y = "New COVID-related deaths",
        title = "New COVID-related deaths by day",
@@ -2058,7 +2129,8 @@ agg.new.deaths.state.plot <- ggplot(agg.deaths.state[date >= "2020-03-01"], aes(
         panel.background = element_blank(),
         axis.ticks = element_blank(),
         axis.line = element_line(colour = "black"),
-        legend.key = element_blank())
+        legend.key = element_blank(),
+        legend.position = "top")
 agg.new.deaths.state.plot
 ```
 

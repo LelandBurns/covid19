@@ -1,0 +1,8 @@
+name: "COVID Monitoring for our Family"
+navbar:
+  title: "COVID Monitoring for our Family"
+  left:
+    - text: "Home"
+      href: index.html
+    - text: "Background"
+      href: outputs/covid_plots.fam.html
