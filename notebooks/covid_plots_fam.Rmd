@@ -9,7 +9,7 @@ date: 'Last updated on `r format(Sys.time(), "%B %d, %Y")` to include data from 
 ---
 
 ## Background
-Notes and format last updated Apr 16, 2020 (test 5!)
+Notes and format last updated Apr 16, 2020 (test 6!)
 
 * This page shows COVID data broken down into regions that affect our family. It pulls from publicly available raw data from the NY Times, which is reported daily. It's on a one-day lag, so when you see this report, the most recent day included will be that reported the day prior.
 * The table of contents above summarizes the major sections and can be used to jump to those sections.

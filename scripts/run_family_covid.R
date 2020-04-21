@@ -23,7 +23,7 @@ subject.text <- paste0("Time to push your COVID report for ", today)
 #subject.text <- paste0("Automated COVID report for ", today, " with some cool updates")
 
 
-body.text <- paste0("This is an automated email. The COVID family html content should have updated with data through ",
+body.text <- paste0("This is an automated email -- testing...here goes nothing. The COVID family html content should have updated with data through ",
                     yesterday, ". To update the webpage, commit and push changes to your Github repo.")
 
 recipient.emails <- c("leland.b.burns@gmail.com")
