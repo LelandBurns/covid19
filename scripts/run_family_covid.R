@@ -19,12 +19,12 @@ rmarkdown::render(input = "~/covid19/notebooks/covid_plots_fam.Rmd",
                   output_file = "~/covid19/docs/index.html")
 
 # send reminder email
-subject.text <- paste0("Time to push your COVID report for ", today)
+subject.text <- paste0("COVID auto update is running for ", today)
 #subject.text <- paste0("Automated COVID report for ", today, " with some cool updates")
 
 
-body.text <- paste0("This is an automated email -- testing...here goes nothing. The COVID family html content should have updated with data through ",
-                    yesterday, ". To update the webpage, commit and push changes to your Github repo.")
+body.text <- paste0("This is an automated email. The COVID family html content should have updated with data through ",
+                    yesterday, " and should push to Github automatically. To check, go to lelandburns.github.io/covid19.")
 
 recipient.emails <- c("leland.b.burns@gmail.com")
 
