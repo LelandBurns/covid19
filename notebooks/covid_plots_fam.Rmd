@@ -5,7 +5,7 @@ output:
     toc: true
     toc_depth: 4
     fig_width: 10
-date: '`r format(Sys.time(), "%B %d, %Y")`'
+date: 'Last updated on `r format(Sys.time(), "%B %d, %Y")` to include data from the previous day'
 ---
 
 ## Background
