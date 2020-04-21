@@ -1,0 +1,8 @@
+name: "Family Covid Monitoring Page"
+navbar:
+  title: "Family Covid Monitoring Page"
+  left:
+    - text: "Home"
+      href: index.html
+    - text: "First test"
+      href: about.html
