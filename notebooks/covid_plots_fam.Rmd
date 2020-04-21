@@ -2276,35 +2276,55 @@ agg.new.deaths.county.plot
 * This section is a work in progress. It's exploring what effect stay-at-home orders have on spread. It's inherentely messy because some states have localized orders but not orders for their full state and because states implemented the orders at different times.
   * The first plot shows a rolling 3-day average of new cases per million residents, averaged across 2 groups of states -- those with a state-wide stay-at-home order in effect and those without. The size of the dots reflect the number of states in each group for each given day (so the dots are getting bigger over time for the group with orders, as more states implement those orders).
     * So far, this view doesn't show if these orders are "working" or not. Instead, the biggest takeaway from the current plot is that the states that implemented orders are reacting to having worse spread, which is why the case rate is so much higher at the start for them. As a state decides it has a problem and implements an order, it joins the grouping of states with orders and drives the rate up for that group.
-    * Over time (if the policies work), what we'd expect is that the line for the group with orders flattens a bit, but we'll see. It also may become moot if all states issue orders.
-  * The second plot is new and is attempting to track the progress normalized for how long each state has had the order. It shows the average of the ratio for each state of the new cases for any given day to the number of new cases on the day the order was enacted. If the orders are working, over time this line should come back down...but it isn't there yet.
+    * Over time (if the policies work), what we'd expect is that the line for the group with orders flattens or declines in relation to the no-order group. It also may become moot if all states issue orders.
+    * As states start rescending their orders, I'll put them back into the no-order group, so the no-order group should beging to expand again.
+  * The second plot tracks progress of states by the number of days since orders have been in effect. It includes only those states with orders and shows their average new case growth rate (a rolling 3-day average of daily growth rates) based on how long it's been since the order went into effect. Again, the size of the dots show how many states are included in each point -- i.e., as you go further right, the dots are smaller because less states are that far past their order.
+    * I'm working on how to add a baseline to this chart to compare to states without orders, but that's challenging because there's no way to fully align timing.
+
 
 ```{r echo = F, message = F, warning = F}
 state.dt <- state.raw
 state.dt[, stay_date := stay_dates$start_date[match(state.raw$state, stay_dates$state)]]
 state.dt[, population := stay_dates$population[match(state.raw$state, stay_dates$state)]]
-#state.dt[, flgOrder := ifelse(is.na(stay_date), 0, 1)]
 state.dt[, flgOrder := ifelse(is.na(stay_date) | stay_date >= date, "No", "Yes")]
-#state.dt[, ctDaysFromBaseline := ifelse(flgOrder == 0, as.integer(date - as.Date("2020-03-10")),
-#                                         as.integer(date - stay_date))]
-#state.dt[, ctDaysFromBaseline := as.integer(date - stay_date)]
+
 temp <- state.dt
 temp <- temp[, c("date", "state", "cases")]
 setnames(temp, "cases", "cases_prev3")
 state.dt[, dtPrev3 := date - 3]
-state.dt <- merge(state.raw, temp, all.x = T, by.x = c("state", "dtPrev3"), by.y = c("state", "date"))
+state.dt <- merge(state.dt, temp, all.x = T, by.x = c("state", "dtPrev3"), by.y = c("state", "date"))
 state.dt[, casesNewPerMillion := as.integer((cases - cases_prev3)/population * 1000000)]
+
+# temp <- state.dt
+# temp <- temp[, c("date", "state", "cases")]
+# setnames(temp, "cases", "cases_prev")
+# state.dt[, dtPrev := date - 1]
+# state.dt <- merge(state.dt, temp, all.x = T, by.x = c("state", "dtPrev"), by.y = c("state", "date"))
+# state.dt[, new_cases_rtgrowth := cases/cases_prev - 1]
+# 
+# temp <- state.dt[, c("date", "state", "new_cases_rtgrowth")]
+# setnames(temp, "new_cases_rtgrowth", "new_cases_rtgrowth_prev1")
+# state.dt <- merge(state.dt, temp, all.x = T, by.x = c("state", "dtPrev"), by.y = c("state", "date"))
+# 
+# temp <- state.dt[, c("date", "state", "new_cases_rtgrowth")]
+# setnames(temp, "new_cases_rtgrowth", "new_cases_rtgrowth_prev2")
+# state.dt[, dtPrev2 := date - 2]
+# state.dt <- merge(state.dt, temp, all.x = T, by.x = c("state", "dtPrev2"), by.y = c("state", "date"))
+# 
+# state.dt[, new_cases_rtgrowth_rolling3 := (new_cases_rtgrowth + new_cases_rtgrowth_prev1 + new_cases_rtgrowth_prev2)/3]
+
 state.agg.comp <- state.dt[date >= "2020-03-10" & !state %in% "Puerto Rico"]
 state.agg.comp <- state.agg.comp[order(date, flgOrder),
                           .(avgNewCases = mean(casesNewPerMillion, na.rm = T),
                             cts = .N),
                            by = c("date", "flgOrder")]
+
 state.agg.comp.plot <- ggplot(state.agg.comp, aes(x = date, y = avgNewCases, colour = as.factor(flgOrder))) +
   geom_point(aes(size = cts)) +
   geom_line(aes(group = flgOrder)) +
     labs(x = "Date",
-       y = "New confirmed COVID cases per million residents",
-       title = "New COVID cases vs.stay-at-home order",
+       y = "Average of new cases per million resident",
+       title = "New COVID case rates compared to stay-at-home order",
        subtitle = "Average of rolling 3-day total of new cases per million residents",
        size = "Count of states",
        colour = "Stay-at-home order") +
@@ -2320,22 +2340,46 @@ state.agg.comp.plot
 ```
 
 ```{r echo = F, message = F, warning = F}
+state.dt <- state.raw
+state.dt[, stay_date := stay_dates$start_date[match(state.raw$state, stay_dates$state)]]
+state.dt[, population := stay_dates$population[match(state.raw$state, stay_dates$state)]]
+state.dt[, flgOrder := ifelse(is.na(stay_date) | stay_date >= date, "No", "Yes")]
 state.dt[, daysFromStayOrder := as.integer(date - stay_date)]
-key.data <- state.dt[daysFromStayOrder == 0]
-state.dt[, baselineNewCases := key.data$casesNewPerMillion[match(state.dt$state, key.data$state)]]
-state.dt[, ratioToBaseline := casesNewPerMillion/baselineNewCases]
+# key.data <- state.dt[daysFromStayOrder == 0]
+# state.dt[, baselineNewCases := key.data$casesNewPerMillion[match(state.dt$state, key.data$state)]]
+# state.dt[, ratioToBaseline := casesNewPerMillion/baselineNewCases]
+
+temp <- state.dt
+temp <- temp[, c("date", "state", "cases")]
+setnames(temp, "cases", "cases_prev")
+state.dt[, dtPrev := date - 1]
+state.dt <- merge(state.dt, temp, all.x = T, by.x = c("state", "dtPrev"), by.y = c("state", "date"))
+state.dt[, new_cases_rtgrowth := cases/cases_prev - 1]
+
+temp <- state.dt[, c("date", "state", "new_cases_rtgrowth")]
+setnames(temp, "new_cases_rtgrowth", "new_cases_rtgrowth_prev1")
+state.dt <- merge(state.dt, temp, all.x = T, by.x = c("state", "dtPrev"), by.y = c("state", "date"))
+
+temp <- state.dt[, c("date", "state", "new_cases_rtgrowth")]
+setnames(temp, "new_cases_rtgrowth", "new_cases_rtgrowth_prev2")
+state.dt[, dtPrev2 := date - 2]
+state.dt <- merge(state.dt, temp, all.x = T, by.x = c("state", "dtPrev2"), by.y = c("state", "date"))
+
+state.dt[, new_cases_rtgrowth_rolling3 := (new_cases_rtgrowth + new_cases_rtgrowth_prev1 + new_cases_rtgrowth_prev2)/3]
+
 state.stay.comp <- state.dt[!is.na(stay_date) & daysFromStayOrder >= -7 & !state %in% "Puerto Rico"]
-state.stay.comp <- state.stay.comp[!is.na(ratioToBaseline),
-                                   .(avgBaselineRate = mean(ratioToBaseline, na.rm = T),
+state.stay.comp <- state.stay.comp[!is.na(new_cases_rtgrowth_rolling3),
+                                   .(avgNewCaseGrowth = mean(new_cases_rtgrowth_rolling3, na.rm = T),
                                      cts = .N),
                                    by = c("daysFromStayOrder")]
-state.stay.comp.plot <- ggplot(state.stay.comp, aes(x = daysFromStayOrder, y = avgBaselineRate)) +
+
+state.stay.comp.plot <- ggplot(state.stay.comp, aes(x = daysFromStayOrder, y = avgNewCaseGrowth)) +
   geom_line() +
   geom_point(aes(size = cts)) +
     labs(x = "Days from stay-at-home order",
-       y = "Ratio of new cases to day order was issued",
+       y = "Average new case growth rate",
        title = "New COVID cases by stay-at-home order timing",
-       subtitle = "Comparing new cases to day when order was issued",
+       subtitle = "New case growth rate is a rolling 3-day average",
        size = "Count of states") +
   theme(plot.title = element_text(hjust = 0.5),
         plot.subtitle = element_text(hjust = 0.5),
