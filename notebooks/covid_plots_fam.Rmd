@@ -732,7 +732,7 @@ Includes our counties and the top 5 in the US for perspective.
 ```{r  echo = F, message = F, warning = F}
 # merge county raw and county pop
 county.use <- county.raw
-county.use[, county := gsub("(.*) City", "\\1", county)]
+#county.use[, county := gsub("(.*) City", "\\1", county)]
 county.per.cap <- merge(county.use, county_pop, all.x = T, by.x = c("county", "state"), by.y = c("CTYNAME", "STNAME"))
 county.per.cap[, casesPerMillion := round(cases/POPESTIMATE2019 * 1000000, 2)]
 date.cut <- max(county.per.cap$date)
@@ -756,7 +756,7 @@ kable(table.data, align = "l") %>%
 Our county percentiles over time
 ```{r  echo = F, message = F, warning = F}
 county.use <- county.raw
-county.use[, county := gsub("(.*) City", "\\1", county)]
+#county.use[, county := gsub("(.*) City", "\\1", county)]
 county.per.cap <- merge(county.use, county_pop, all.x = T, by.x = c("county", "state"), by.y = c("CTYNAME", "STNAME"))
 county.per.cap[, casesPerMillion := round(cases/POPESTIMATE2019 * 1000000, 2)]
 county.per.cap <- county.per.cap[order(fips, date),
