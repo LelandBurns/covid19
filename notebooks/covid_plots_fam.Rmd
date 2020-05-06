@@ -403,7 +403,7 @@ for (i in 1:length(use.states)) {
 
 ### Death growth rates {.tabset .tabset-fade}
 
-* This section charts the growth rate of both total and new cases for each of our respective geographies. Each geography has its own chart, and then that chart will have a trendline for total cases and new cases.
+* This section charts the growth rate of both total and new deaths for each of our respective geographies. Each geography has its own chart, and then that chart will have a trendline for total deaths and new deaths.
   * There are only plots for the U.S. and states because the numbers for the counties are too small to generate worthwhile trendlines in this section.
 * Note that we're charting growth rate and not a count of deaths, so don't think of these as the standard "curve" that we hear about in the news and that we want to flatten. Instead, these growth rate charts help track more precisely what we can only estimate when we see those other curves. For these growth rate charts, if the line is above zero, the metric we are tracking (total or new deaths) is continuing to grow. If the growth rate line is going up, it's growing more quickly each day; if it's going down but still above zero, it's growing less quickly (but still growing). Only when the growth rate lines go below zero has the metric stopped growing.
 * Each of these two lines using rolling windows to calculate a growth rate for that particular metric. I do the calculation differently for each to smooth out some of the large day-to-day discrepancies in new death reporting at the state level.
