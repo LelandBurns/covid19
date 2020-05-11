@@ -11,7 +11,7 @@ date: 'Last updated on `r format(Sys.time(), "%B %d, %Y")` to include data from 
 ## Background
 Notes and format last updated May 7, 2020
 
-**Starting on the May 7th update, the NY Times began including probable covid cases/deaths along with confirmed. This mostly affects death counts -- for certain geographies that include probably COVID deaths in addition to confirmed, these are now added to the totals. For the time being, they were all added to the May 6th totals, causing a big spike at the U.S. level. Over time, NY Times will revise their historical accounts and distribute these added deaths when they actually occurred, so the spike should fade.**
+**Starting on the May 7th update, the NY Times began including probable covid cases/deaths along with confirmed. This mostly affects death counts -- for certain geographies that include probable COVID deaths in addition to confirmed, these are now added to the totals. For the time being, they were all added to the May 6th totals, causing a big spike at the U.S. level. Over time, NY Times will revise their historical counts and distribute these added deaths when they actually occurred, so the spike should fade.**
 
 * This page shows COVID data broken down into regions that affect our family. It pulls from publicly available raw data from the NY Times, which is reported daily. It's on a one-day lag, so when you see this report, the most recent day included will be that reported the day prior.
 * The table of contents above summarizes the major sections and can be used to jump to those sections.
